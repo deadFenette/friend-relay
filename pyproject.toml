@@ -1,0 +1,75 @@
+# Конфиг Ruff: https://docs.astral.sh/ruff/
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["legacy", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+# Включаем базовые проверки + import sorting + unused imports + pyupgrade
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (unused imports, undefined names, etc.)
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear (частые баги)
+    "BLE",  # blind-except (мы ignore'им, но нужно явно select чтобы ignore работал)
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+    "PIE",  # flake8-pie
+    "TRY",  # tryceratops (исключения)
+    "EXE",  # flake8-executable
+    "S",    # bandit (security) — у нас ловит try-except-pass
+]
+ignore = [
+    "E501",  # line too long — мы пишем на 100, но иногда длинные QSS-строки
+    "E402",  # module-level import not at top — у нас есть ленивые импорты
+    "E741",  # ambiguous variable name 'l' — ок в коротких циклах отрисовки (laser = l)
+    "W291",  # trailing whitespace — автофиксили, но в QSS-строках бывает
+    "W292",  # no newline at end of file — не критично
+    "W293",  # blank line contains whitespace — стиль, не ломает ничего
+    "B008",  # function call in default argument — QObject signal'ы в __init__
+    "B904",  # raise from — у нас много обёрнутых исключений в RelayError, ok
+    "UP007", # use X | Y — мы уже используем через __future__ annotations
+    "UP015", # unnecessary mode argument — QFileDialog.ReadOnly etc.
+    "UP045", # use X | None — то же самое
+    "BLE001", # blind except — сервер НЕ должен падать из-за бота, ловим всё
+    "S101",   # use of assert — мы используем assert в тестах и для инвариантов
+    "S104",   # binding to all interfaces — хост слушает 0.0.0.0 намеренно
+    "S108",   # /tmp usage — ок для тестовых артефактов
+    "S110",   # try-except-pass — то же самое, для устойчивости сервера
+    "S112",   # try-except-continue — то же
+    "S301",   # pickle — не используем, но пусть не ругается на import
+    "S310",   # URL open audit — мы ходим по http(s) к доверенным OG-preview
+    "S311",   # random for crypto — у нас random для игры, не для крипто
+    "S324",   # hashlib.md5 — weak hash для fingerprint'ов
+    "S603",   # subprocess without shell=True check — мы не вызываем subprocess
+    "S607",   # partial path in subprocess — то же
+    "SIM102", # nested if -> single if — иногда так читабельнее
+    "SIM103", # return condition directly — ок, оставим читабельность
+    "SIM105", # contextlib.suppress — старый try-except-pass ок для нас
+    "SIM115", # context manager for opening — у нас long-lived file handles (history)
+    "SIM223", # False and ... — пустой placeholder
+    "RUF001", # ambiguous cyrillic in strings — проект русскоязычный
+    "RUF002", # ambiguous cyrillic in docstrings — то же
+    "RUF003", # ambiguous cyrillic in comments — то же
+    "RUF012", # mutable default for class attr — TYPES dict'ы у нас на месте
+    "RUF059", # unused unpacked var — иногда распаковываем ради структуры
+    "PIE810", # startswith tuple — иногда явнее
+    "TRY002", # custom exception — мы используем встроенные
+    "TRY003", # long messages outside exception class — у нас русские тексты ошибок
+    "TRY300", # move statement to else block — ok как есть
+    "TRY301", # abstract raise to inner function — ok как есть
+    "EXE001", # shebang but not executable — main_qt.py запускается через python
+    "EXE002", # executable but no shebang — на Linux-сборках файлы получают +x бит
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports в __init__.py ок (re-exports)
+"tests/*" = ["F401", "F811", "S105", "S323"]  # S105: тестовые секреты; S323: self-signed TLS
+"scripts/*" = ["F401"]  # скрипты-проверки импортируют модули ради побочных эффектов
+"legacy/*" = ["E", "W", "F", "I", "UP", "B"]  # legacy не трогаем
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

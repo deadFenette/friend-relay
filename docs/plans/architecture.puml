@@ -1,0 +1,128 @@
+@startuml FriendRelay_architecture
+' Friend Relay — компонентная архитектура (факт v3.6.3 + план v3.8)
+' Рендер: VS Code (расширение PlantUML) или https://kroki.io/plantuml/png
+' ВАЖНО: <size:..> действует только в пределах одной строки — теги
+' сбалансированы на КАЖДОЙ строке метки.
+' Палитра: низкая насыщенность, акцент один — ScreenHub (v3.8 строится на нём)
+
+title <b>Friend Relay — архитектура</b> (v3.6.3, план v3.8 пунктиром)\n<size:12>один порт HTTP+HTTPS · голос порт+1 · voxel порт+2 · медиа экрана P2P</size>
+
+skinparam backgroundColor #F8FAFC
+skinparam defaultFontSize 13
+skinparam titleFontSize 18
+skinparam componentStyle rectangle
+skinparam roundCorner 8
+skinparam nodesep 55
+skinparam ranksep 65
+skinparam shadowing false
+
+skinparam component {
+  BackgroundColor #E9EEF3
+  BorderColor #64748B
+  FontColor #243447
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+  FontColor #243447
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #FFF7ED
+  BorderColor #C6866A
+}
+skinparam cloud {
+  BackgroundColor #F5F3FF
+  BorderColor #8B7FC7
+}
+skinparam note {
+  BackgroundColor #F1F5F9
+  BorderColor #94A3B8
+  FontColor #475569
+}
+skinparam ArrowColor #475569
+skinparam ArrowFontColor #475569
+skinparam ArrowFontSize 11
+hide stereotype
+
+' акцентные элементы: ScreenHub (живое) и Нативный стример (план v3.8)
+skinparam component<<hot>> {
+  BorderColor #4C6EF5
+  BorderThickness 2.5
+}
+skinparam component<<plan>> {
+  BorderColor #4C6EF5
+  BorderStyle dashed
+}
+
+package "Машина хоста" {
+
+  component "Qt GUI хоста\n<size:11>server_gui.py · PySide6</size>" as GUI #EFF6FF
+  component "Qt-клиент\n<size:11>main_qt.py · PySide6</size>" as QTCLIENT #EFF6FF
+
+  package "Процесс сервера (Python)" {
+    component "<b>RelayServer</b> — фасад\n<size:11>lib/relay_server.py</size>" as RS
+    component "<b>tls_mux</b>\n<size:11>lib/server/tls_mux.py</size>\n<size:11>HTTP и HTTPS на одном порту</size>" as TLS
+    component "<b>http_api + auth</b>\n<size:11>HMAC-сессии, лимиты тел</size>\n<size:11>поллинг: чат/файлы/музыка/сигналы</size>" as API
+    component "<b>ScreenHub</b>\n<size:11>screen/hub.py — без портов и потоков</size>\n<size:11>реестр показов + сигналинг-почта</size>\n<size:11>(v3.6.3: пульс зрителя 12с / чистка 40с)</size>" as SH <<hot>> #FFFFFF
+    component "<b>VoiceMixer</b>\n<size:11>voice/mixer.py — TCP-мост порт+1</size>\n<size:11>серверное микширование голоса</size>" as VM #F0FDF4
+    component "<b>VoxelServer</b>\n<size:11>lib/voxel_server.py — TCP порт+2</size>" as VX
+    component "<b>Боты</b>\n<size:11>lib/bots/ — MusicBot</size>\n<size:11>(+ менеджер автоперезапуска)</size>" as BOTS
+    component "<b>updater</b>\n<size:11>lib/updater.py — зеркала, sha256</size>\n<size:11>helper .bat (фикс v3.6.3)</size>" as UPD
+    component "event_store / storage\n<size:11>журнал JSONL, файлы</size>\n<size:11>музыка-состояние</size>" as ST
+  }
+
+  database "relay_data\n<size:11>журнал · файлы · музыка · логи</size>" as DISK
+}
+
+cloud "STUN\n<size:11>stun.l.google.com и др.</size>" as STUN
+cloud "Зеркала обновлений\n<size:11>version.json → download_urls</size>" as MIRRORS
+
+package "Друзья (клиенты)" {
+  component "Веб-клиент (браузер)\n<size:11>web_client/ — core, main, chat</size>\n<size:11>screen.js, voice, music, games</size>\n<size:11>скины: классика / «Ночник»</size>" as WEB #EFF6FF
+}
+
+' ── управление ──
+GUI --> RS : запуск/стоп,\nнастройки, музыка
+GUI --> DISK : бэкапы, логи
+
+' ── клиенты → сервер ──
+WEB --> TLS : HTTP(S) :8420\n<size:10>чат, файлы, музыка, сигналинг экрана</size>
+QTCLIENT --> TLS : HTTP / HTTPS
+TLS --> API
+WEB --> VM : TCP :8421\n<size:10>микрофон / приём голоса</size>
+QTCLIENT --> VM
+WEB --> VX : TCP :8422\n<size:10>voxel-игра</size>
+
+' ── внутренние ──
+API --> SH : publish / watch / poll
+API --> BOTS : команды !music
+API --> ST
+RS --> ST
+ST --> DISK
+BOTS --> DISK : music_data.json\n<size:10>дебаунс-запись</size>
+
+' ── медиа экрана: P2P мимо сервера ──
+note top of WEB
+  <b>медиа экрана — P2P WebRTC</b>
+  <size:10>ведущий ⇄ зритель напрямую (STUN)</size>
+  <size:10>сервер видит только сигналинг</size>
+end note
+SH --> STUN : ICE-подсказки\n<size:10>сервер не участвует в медиа</size>
+
+' ── обновления ──
+UPD --> MIRRORS : zip + version.json\n<size:10>sha256-проверка, откат .bak</size>
+
+' ── план v3.8 ──
+component "<b>Нативный стример</b>\n<size:11>план v3.8: захват экрана</size>\n<size:11>+ WASAPI-loopback (системный звук)</size>\n<size:11>прямо из Qt — «анрил»</size>" as NATIVE <<plan>> #FFFFFF
+
+NATIVE .> SH : тот же сигналинг —\nвеб-зрители без изменений
+NATIVE .[#4C6EF5,dashed]> WEB : видео + звук P2P WebRTC
+QTCLIENT .> NATIVE : смотреть стримы\n<size:10>в Qt (aiortc-приёмник)</size>
+
+note bottom of VM
+  Голос идёт через сервер (микшер),
+  экран — P2P: разные пути, конфликтов нет
+end note
+
+@enduml

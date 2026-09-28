@@ -1,0 +1,1996 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Friend Relay — Web Client / «Studio» design system
+   ─────────────────────────────────────────────────────────────────────
+   Принципы (задумано как работу UI/UX дизайнера, а не «как ИИ»):
+
+     • ОДИН уверенный акцент, а не градиент индиго→фиолет.
+       По умолчанию — тёплый коралл #ff5b3a. Градиент «себя» убран:
+       бабл «меня» — однотонный, плоский, как в Linear/Vercel.
+
+     • Тёплая почти-чёрная база вместо цинкового #0e1016. Чуть тепла
+       в тенях и в поверхности — глаз читает как «дорого», а не «AI».
+
+     • Типографика с характером: тяжёлые заголовки (-.02em tracking),
+       верхний регистр микро-лейблов (1.4px tracking), моно для цифр
+       и кода. Никаких «плавающих» размеров.
+
+     • Иконки — моно-лайн SVG (см. icons.js), не эмодзи. Эмодзи
+       оставлены только в тексте сообщений и реакциях (пользовательские
+       данные).
+
+     • Радиус 8/10/14 — намеренно меньше «AI-стандарта» 16/20. Пиллы
+       только там, где форма = функция (композер, бейджи).
+
+     • Глубина через 1px-границы, а не тени. Тени — только там, где
+       элемент реально «висит» (toast, оверлеи).
+
+     • Стекло/аврора/градиенты — ОТКЛЮЧЕНЫ по умолчанию, но остаются
+       доступными через плагины Appearance Studio (святая святых —
+       кастомизация пользователя неприкосновенна).
+
+   ── Совместимость ──
+   Все CSS-переменные, которыми манипулирует appearance.js, сохранены
+   по именам: --accent, --accent2, --me-bubble, --accent-soft,
+   --accent-soft-strong, --accent-border, --glow, --btn-shadow,
+   --btn-shadow-h, --logo-shadow, --thumb-shadow, --font-size-base,
+   --radius, --radius-sm, --glass-blur, --bgfx-op. Все data-атрибуты
+   (data-theme, data-font, data-density, data-bgfx, data-glass,
+   data-anim, data-bubbles, data-avatars) читаются как и раньше.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────── токены ─────────────────────────── */
+:root{
+  /* ── поверхность (тёплая, не цинковая) ── */
+  --bg:#0c0d11;                  /* самая глубокая, чуть тепла */
+  --surface:#14161c;             /* панели/карточки */
+  --surface2:#1b1e26;            /* лёгкий подъём: поля, ховеры */
+  --surface3:#22262f;            /* активные поля, фокус-подложка */
+  --border:rgba(255,255,255,.07);
+  --border2:rgba(255,255,255,.13);  /* усиленная граница */
+  --hover-chip:rgba(255,255,255,.05);
+  --panel-soft:rgba(255,255,255,.025);
+  --pop-border:rgba(255,255,255,.12);
+
+  /* ── текст ── */
+  --text:#e9e7e2;                /* тёплая, не чисто белая */
+  --text-strong:#ffffff;
+  --dim:#9a9aa3;
+  --dim-2:#6b6b75;               /* ещё тише — времена, метаданные */
+
+  /* ── акцент ── (один уверенный цвет, не градиент) */
+  --accent:#ff5b3a;              /* тёплый коралл — «дизайнерский» */
+  --accent2:#ff8a5a;             /* для лёгких градиентов в редких местах */
+  --accent-soft:rgba(255,91,58,.14);
+  --accent-soft-strong:rgba(255,91,58,.4);
+  --accent-border:rgba(255,91,58,.65);
+
+  /* ── семантические ── */
+  --ok:#4ade80;
+  --err:#f87171;
+  --warn:#fbbf24;
+
+  /* ── «себя» — однотонный, не градиент ──
+     (но переменная остаётся «градиентом» для совместимости с темами
+     и плагинами — просто оба стопа одного цвета) */
+  --me-bubble:linear-gradient(135deg,#ff5b3a 0%,#ff5b3a 100%);
+
+  /* ── форма ── намеренно меньше «AI-стандарта» */
+  --radius:10px;
+  --radius-sm:6px;
+  --radius-lg:14px;
+  --radius-pill:999px;
+
+  /* ── тени — редкие, только там, где реально висит ── */
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.45);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.22);
+  --shadow-pop:0 12px 38px rgba(0,0,0,.55);
+  --glow:0 0 0 3px rgba(255,91,58,.18);
+  --btn-shadow:none;
+  --btn-shadow-h:none;
+  --logo-shadow:0 4px 14px rgba(255,91,58,.18);
+  --thumb-shadow:0 1px 4px rgba(255,91,58,.4);
+
+  /* ── фон/стекло — плагины Appearance Studio крутят эти ручки ── */
+  --glass-blur:0px;              /* стекло ОТКЛЮЧЕНО по умолчанию */
+  --bgfx-op:0;                   /* аврора-пятна ВЫКЛ по умолчанию */
+  --header-bg:rgba(12,13,17,.86);
+  --toast-bg:rgba(20,22,28,.96);
+  --focus-bg:#1c2029;
+  --sec-hover-bg:#22262f;
+  --sec-hover-border:rgba(255,255,255,.16);
+  --scroll-thumb:#2c3038;
+  --scroll-thumb-hover:#3a3f4a;
+
+  /* ── типографика ── */
+  --font-stack:"Inter",-apple-system,BlinkMacSystemFont,"SF Pro Text",
+    "Segoe UI Variable","Segoe UI",Roboto,Ubuntu,system-ui,sans-serif;
+  --font-mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Mono",
+    Menlo,Consolas,monospace;
+  --font-size-base:15px;
+
+  /* ── движение ── уверенное, не «пружинящее» */
+  --ease:cubic-bezier(.2,.7,.3,1);
+  --ease-out:cubic-bezier(.16,1,.3,1);
+  --dur-fast:120ms;
+  --dur:200ms;
+  --dur-slow:320ms;
+
+  /* совместимость — старый шорткат (где-то в JS мог использоваться) */
+  --font:15px/1.55 var(--font-stack);
+  --blob1:var(--accent);
+  --blob2:var(--accent2);
+}
+
+/* ── Тема «Lukewarm Ocean» (тёплый океан, Studio v3) ──
+     Палитра пересобрана — больше тепла, лучше контраст, акцент
+     «дорогой» бирюзы без кислотности. ── */
+:root[data-theme="lukewarm-ocean"]{
+  --bg:#08151c;
+  --surface:#0e2230; --surface2:#153244; --surface3:#1c4256;
+  --border:rgba(170,225,235,.08); --border2:rgba(170,225,235,.16);
+  --hover-chip:rgba(170,225,235,.05);
+  --panel-soft:rgba(170,225,235,.025); --pop-border:rgba(170,225,235,.14);
+  --text:#eaf6f8; --text-strong:#ffffff; --dim:#9ec0c8; --dim-2:#6d8e98;
+  --accent:#34c5cd; --accent2:#5ad3d8;
+  --accent-soft:rgba(52,197,205,.14);
+  --accent-soft-strong:rgba(52,197,205,.4);
+  --accent-border:rgba(52,197,205,.65);
+  --ok:#3ddc97; --err:#ff7b72; --warn:#f2c14e;
+  --me-bubble:linear-gradient(135deg,#34c5cd 0%,#34c5cd 100%);
+  --glow:0 0 0 3px rgba(52,197,205,.18);
+  --logo-shadow:0 4px 14px rgba(52,197,205,.2);
+  --thumb-shadow:0 1px 4px rgba(52,197,205,.4);
+  --focus-bg:#153244; --sec-hover-bg:#1c4256;
+  --sec-hover-border:rgba(170,225,235,.22);
+  --scroll-thumb:#1c4256; --scroll-thumb-hover:#28566c;
+  --header-bg:rgba(8,21,28,.86);
+  --toast-bg:rgba(14,34,48,.96);
+  --blob1:#34c5cd; --blob2:#5ad3d8;
+}
+
+/* ── Тема «Snow» (белая, Studio v3) ──
+     Чистый белый фон с холодным серым отливом, тёмный текст,
+     синий акцент как в Notion/Linear. Для тех, кто не любит тёмные
+     темы, но хочет «дорогое» ощущение. ── */
+:root[data-theme="snow"]{
+  --bg:#f6f7f9;                  /* холодный белый, не чисто #fff */
+  --surface:#ffffff;             /* панели — чистый белый */
+  --surface2:#eef0f4;            /* лёгкий подъём */
+  --surface3:#e3e7ed;            /* активные поля */
+  --border:rgba(15,23,42,.08); --border2:rgba(15,23,42,.16);
+  --hover-chip:rgba(15,23,42,.04);
+  --panel-soft:rgba(15,23,42,.025); --pop-border:rgba(15,23,42,.14);
+  --text:#1a1f2e; --text-strong:#0a0e1a; --dim:#525c72; --dim-2:#67718a;
+  --accent:#2563eb;              /* синий Linear-style */
+  --accent2:#3b82f6;
+  --accent-soft:rgba(37,99,235,.10);
+  --accent-soft-strong:rgba(37,99,235,.32);
+  --accent-border:rgba(37,99,235,.55);
+  --ok:#059669; --err:#dc2626; --warn:#d97706;
+  --me-bubble:linear-gradient(135deg,#2563eb 0%,#2563eb 100%);
+  --glow:0 0 0 3px rgba(37,99,235,.14);
+  --logo-shadow:0 4px 14px rgba(37,99,235,.18);
+  --thumb-shadow:0 1px 4px rgba(37,99,235,.32);
+  --focus-bg:#eef0f4; --sec-hover-bg:#e3e7ed;
+  --sec-hover-border:rgba(15,23,42,.22);
+  --scroll-thumb:#cdd3de; --scroll-thumb-hover:#b3bccd;
+  --header-bg:rgba(246,247,249,.88);
+  --toast-bg:rgba(255,255,255,.97);
+  --blob1:#3b82f6; --blob2:#60a5fa;
+}
+
+/* ── Тема «Cherry Grove» (светлая) ── пересобрана под Studio-логику:
+     тёплая бумага вместо холодного розового, вишнёвый акцент
+     один, без градиента-бабла. ── */
+:root[data-theme="cherry-grove"]{
+  --bg:#f6efe9;                  /* тёплая бумага, не розовый леденец */
+  --surface:#fdf7f1;
+  --surface2:#f3e7df; --surface3:#ebd7cc;
+  --border:rgba(64,42,53,.10); --border2:rgba(64,42,53,.18);
+  --hover-chip:rgba(64,42,53,.06);
+  --panel-soft:rgba(64,42,53,.03); --pop-border:rgba(64,42,53,.16);
+  --text:#3d2a32; --text-strong:#1f1418; --dim:#6d4c59; --dim-2:#8a7079;
+  --accent:#c92a4f; --accent2:#e0456a;
+  --accent-soft:rgba(201,42,79,.10);
+  --accent-soft-strong:rgba(201,42,79,.32);
+  --accent-border:rgba(201,42,79,.55);
+  --ok:#2f9e6e; --err:#c92a4f; --warn:#b7791f;
+  --me-bubble:linear-gradient(135deg,#c92a4f 0%,#c92a4f 100%);
+  --glow:0 0 0 3px rgba(201,42,79,.16);
+  --logo-shadow:0 6px 28px rgba(201,42,79,.22);
+  --thumb-shadow:0 1px 4px rgba(201,42,79,.3);
+  --focus-bg:#f3e7df; --sec-hover-bg:#ebd7cc;
+  --sec-hover-border:rgba(64,42,53,.22);
+  --scroll-thumb:#d8c0b5; --scroll-thumb-hover:#c4a599;
+  --header-bg:rgba(246,239,233,.88);
+  --toast-bg:rgba(253,247,241,.97);
+  --blob1:#e0456a; --blob2:#f3b8a5;
+}
+
+/* ── Тема «Sakura» (светлая, v3.2.1) ──
+     То, чего не хватало Cherry Grove: не вишнёвая бумага, а именно
+     лепестки — холодновато-розовый фарфор, глубокая слива в тексте,
+     один уверенный розовый акцент. Никакого «розового леденца»:
+     тон держит фарфоровый белый поверхностей. ── */
+:root[data-theme="sakura"]{
+  --bg:#faf1f4;                  /* розовая пудра, а не леденец */
+  --surface:#fffafb;
+  --surface2:#f5e7ed; --surface3:#ecdce5;
+  --border:rgba(74,32,46,.10); --border2:rgba(74,32,46,.18);
+  --hover-chip:rgba(74,32,46,.05);
+  --panel-soft:rgba(74,32,46,.03); --pop-border:rgba(74,32,46,.16);
+  --text:#432a35; --text-strong:#231218; --dim:#6e4c5a; --dim-2:#83687a;
+  --accent:#bf4470; --accent2:#e0719c;
+  --accent-soft:rgba(191,68,112,.10);
+  --accent-soft-strong:rgba(191,68,112,.32);
+  --accent-border:rgba(191,68,112,.55);
+  --ok:#2f9e6e; --err:#cc2b44; --warn:#b7791f;
+  --me-bubble:linear-gradient(135deg,#bf4470 0%,#bf4470 100%);
+  --glow:0 0 0 3px rgba(191,68,112,.16);
+  --logo-shadow:0 4px 14px rgba(191,68,112,.2);
+  --thumb-shadow:0 1px 4px rgba(191,68,112,.32);
+  --focus-bg:#f5e7ed; --sec-hover-bg:#ecdce5;
+  --sec-hover-border:rgba(74,32,46,.22);
+  --scroll-thumb:#e0c3d1; --scroll-thumb-hover:#cfa6ba;
+  --header-bg:rgba(250,241,244,.88);
+  --toast-bg:rgba(255,250,251,.97);
+  --blob1:#e0719c; --blob2:#f2b9d0;
+}
+
+/* ── Тема «Crème Brûlée» (светлая, v3.2.1) ──
+     Крем-брюле с карамелью: сливочный фон, песочное печенье в
+     поверхностях, жжёный сахар в акценте, горький шоколад в тексте.
+     Тёплая «кондитерская» тема для тех, кому Snow слишком холодная,
+     а Cherry Grove слишком красная. ── */
+:root[data-theme="creme-brulee"]{
+  --bg:#f8f2e3;                  /* сливочный крем */
+  --surface:#fffbf0;             /* крем-брюле из-под гриля */
+  --surface2:#f1e6cf; --surface3:#e7d9ba;
+  --border:rgba(74,52,24,.12); --border2:rgba(74,52,24,.2);
+  --hover-chip:rgba(74,52,24,.06);
+  --panel-soft:rgba(74,52,24,.035); --pop-border:rgba(74,52,24,.17);
+  --text:#3f2f1c; --text-strong:#211505; --dim:#6f5a3f; --dim-2:#7d6749;
+  --accent:#a85a15;              /* жжёная карамель */
+  --accent2:#c98a3e;
+  --accent-soft:rgba(168,90,21,.10);
+  --accent-soft-strong:rgba(168,90,21,.32);
+  --accent-border:rgba(168,90,21,.55);
+  --ok:#2f8f5b; --err:#c0392b; --warn:#8f6410;
+  --me-bubble:linear-gradient(135deg,#a85a15 0%,#a85a15 100%);
+  --glow:0 0 0 3px rgba(168,90,21,.15);
+  --logo-shadow:0 4px 14px rgba(168,90,21,.2);
+  --thumb-shadow:0 1px 4px rgba(168,90,21,.32);
+  --focus-bg:#f1e6cf; --sec-hover-bg:#e7d9ba;
+  --sec-hover-border:rgba(74,52,24,.24);
+  --scroll-thumb:#dcc99f; --scroll-thumb-hover:#c8b181;
+  --header-bg:rgba(248,242,227,.88);
+  --toast-bg:rgba(255,251,240,.97);
+  --blob1:#c98a3e; --blob2:#e9c78d;
+}
+
+/* ─────────────────────────── база ─────────────────────────── */
+*{box-sizing:border-box}
+html{scrollbar-color:var(--scroll-thumb) transparent;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  font-feature-settings:"cv02","cv03","cv04","cv11","ss01"}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--font-stack);
+  font-size:var(--font-size-base);
+  font-weight:400;
+  line-height:1.55;
+  min-height:100vh;position:relative;
+  letter-spacing:-.005em;
+  text-rendering:optimizeLegibility;
+}
+/* аврора-пятна ОТКЛЮЧЕНЫ по умолчанию — плагин «Фон» может включить */
+body::before,body::after{
+  content:"";position:fixed;z-index:-1;border-radius:50%;
+  filter:blur(110px);pointer-events:none;
+  opacity:calc(var(--bgfx-op)*.30);
+  transition:opacity var(--dur) var(--ease);
+}
+body::before{width:520px;height:520px;left:-160px;top:-140px;
+  background:radial-gradient(circle,var(--blob1),transparent 70%);
+  animation:drift1 26s ease-in-out infinite}
+body::after{width:560px;height:560px;right:-180px;bottom:-160px;
+  background:radial-gradient(circle,var(--blob2),transparent 70%);
+  opacity:calc(var(--bgfx-op)*.22);
+  animation:drift1 34s ease-in-out infinite reverse}
+@keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}
+  50%{transform:translate(70px,46px) scale(1.09)}}
+
+/* ── Плагин «Фон»: сетка/точки рисуются в том же фиксированном слое ── */
+html[data-bgfx="grid"] body::before{
+  width:auto;height:auto;left:0;top:0;border-radius:0;filter:none;
+  animation:none;opacity:calc(var(--bgfx-op)*.55);
+  background:linear-gradient(var(--hover-chip) 1px,transparent 1px) 0 0/44px 44px,
+    linear-gradient(90deg,var(--hover-chip) 1px,transparent 1px) 0 0/44px 44px;
+}
+html[data-bgfx="dots"] body::before{
+  width:auto;height:auto;left:0;top:0;border-radius:0;filter:none;
+  animation:none;opacity:calc(var(--bgfx-op)*.8);
+  background:radial-gradient(var(--hover-chip) 1.5px,transparent 1.6px) 0 0/26px 26px;
+}
+html[data-bgfx="grid"] body::after,
+html[data-bgfx="dots"] body::after,
+html[data-bgfx="plain"] body::before,
+html[data-bgfx="plain"] body::after{display:none}
+
+/* ── Плагин «Типографика» — системные гарнитуры (LAN без интернета) ── */
+html[data-font="rounded"]{--font-stack:ui-rounded,"SF Pro Rounded",
+  "Segoe UI Variable Display","Nunito","Varela Round",system-ui,sans-serif}
+html[data-font="serif"]{--font-stack:Georgia,"Iowan Old Style",
+  "Palatino Linotype","Times New Roman",serif}
+html[data-font="mono"]{--font-stack:ui-monospace,"Cascadia Mono",
+  "JetBrains Mono",Consolas,monospace}
+
+/* ── Плагин «Анимации» — выкл = всё мгновенно ── */
+html[data-anim="off"] *,html[data-anim="off"] *::before,
+html[data-anim="off"] *::after{
+  animation:none!important;transition:none!important;
+}
+
+/* ─────────────────────────── SVG-иконки ───────────────────────────
+   .ico — монолайн 24×24, текущий цвет. Размер задаёт контекст:
+   шапка/табы — 16px, кнопки действий — 14px, лого — 24px. */
+.ico{width:1em;height:1em;display:inline-block;
+  vertical-align:-.18em;flex:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.ico-host{display:inline-flex;align-items:center;justify-content:center}
+header .ico,.tabs .ico{font-size:16px}
+.chatTop .ico,.row .ico,#composer .ico,#dmComposer .ico{font-size:14px}
+.brandhero .logo .ico{font-size:32px}
+#btnConnect .ico{font-size:18px}
+button .ico + span,button span + .ico{margin-left:.45em}
+.ico-host:has(.ico:only-child){padding:0}
+/* иконка «темы» в шапке — пусть будет одноцветной, без декора */
+#btnTheme .ico{font-size:15px}
+
+/* ─────────────────────────── шапка ───────────────────────────
+   Редакционный подход: три визуальные группы (бренд · статус · инструменты),
+   разделённые широкими промежутками. Это даёт «дышащий» верхний бар
+   с явным запасом для будущих элементов (поиска, меню, аккаунта). */
+header{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:24px;
+  padding:14px 28px;background:var(--header-bg);
+  /* плагин «Стекло» — по умолчанию blur=0 (выключено) */
+  backdrop-filter:blur(var(--glass-blur)) saturate(1.35);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.35);
+  border-bottom:1px solid var(--border);
+  flex-wrap:wrap;
+}
+html[data-glass="off"] header{backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Группа 1: бренд ── */
+.h-brand{
+  display:inline-flex;align-items:center;gap:11px;flex:none;
+  padding-right:24px;border-right:1px solid var(--border);
+}
+.h-brand b{
+  font-size:15px;font-weight:600;letter-spacing:-.015em;
+  display:inline-flex;align-items:center;gap:10px;
+  color:var(--text-strong);
+}
+.h-brand b .hint{
+  font-size:10px;color:var(--dim-2);font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;
+  padding:2px 7px;border-radius:4px;
+  background:var(--surface2);border:1px solid var(--border);
+}
+.brandlogo{
+  width:28px;height:28px;border-radius:8px;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:14px;color:var(--accent);
+  background:var(--accent-soft);
+  border:1px solid var(--accent-border);
+}
+.brandlogo .ico{font-size:17px;color:var(--accent)}
+
+/* ── Группа 2: статус (конн-пилл + онлайн) ── */
+.h-status{
+  display:inline-flex;align-items:center;gap:12px;flex:none;
+}
+#online{color:var(--dim);font-size:12px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em;
+  display:inline-flex;align-items:center;gap:6px}
+#online::before{
+  content:"";width:3px;height:3px;border-radius:50%;
+  background:var(--dim-2);opacity:.6}
+.connpill{
+  display:inline-flex;align-items:center;gap:8px;padding:6px 13px 6px 10px;
+  border-radius:var(--radius-pill);background:var(--surface2);
+  border:1px solid var(--border);font-size:12px;color:var(--dim);
+  font-variant-numeric:tabular-nums;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--err);
+  display:inline-block;transition:background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease)}
+.dot.on{background:var(--ok);
+  box-shadow:0 0 0 0 rgba(74,222,128,.4);
+  animation:pulse 2.6s var(--ease-out) infinite}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(74,222,128,.32)}
+  70%{box-shadow:0 0 0 7px rgba(74,222,128,0)}
+  100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
+
+/* ── Группа 3: инструменты (хост + тема + UX-студия) ──
+   Прижата вправо флексом. Группа «приборов» — компактная,
+   с явным отделением от статуса. */
+.h-tools{
+  display:inline-flex;align-items:center;gap:8px;flex:none;
+  margin-left:auto;
+}
+.h-tools .h-divider{
+  width:1px;height:22px;background:var(--border);margin:0 6px}
+header .hint{font-size:11.5px;color:var(--dim-2)}
+/* кнопки в группе инструментов — одинаковый компактный размер */
+.h-tools button{
+  padding:7px 11px;font-size:13.5px;line-height:1;min-width:36px;
+  height:32px;display:inline-flex;align-items:center;justify-content:center;
+}
+.h-tools button .ico{font-size:16px}
+/* технические строки (хост:порт, коды матчей, времена) — моноширинный,
+   чтобы цифры и пунктуация читались как «данные», а не как текст */
+#hostInfo{
+  font-variant-numeric:tabular-nums;
+  font-family:var(--font-mono);font-size:11.5px;letter-spacing:0;
+  color:var(--dim);padding:6px 10px;border-radius:6px;
+  background:var(--surface2);border:1px solid var(--border);
+  max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#chessCode{font-family:var(--font-mono);letter-spacing:.05em}
+#voiceHttpsHint{font-family:var(--font-mono);font-size:11px;
+  background:var(--surface2);padding:1px 5px;border-radius:3px;
+  border:1px solid var(--border)}
+.volVal,#volVal{font-variant-numeric:tabular-nums}
+
+main{max-width:920px;margin:0 auto;padding:24px 18px 48px}
+
+
+/* ─────────────────────────── панели/карточки ─────────────────────────── */
+.panel{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:22px;margin-bottom:16px;
+}
+.hidden{display:none!important}
+
+/* ── Плагин «Форма и плотность» ── */
+html[data-density="compact"] .panel{padding:16px 17px}
+html[data-density="compact"] .msg{padding:8px 12px}
+html[data-density="compact"] #feed,
+html[data-density="compact"] #dmFeed{gap:6px}
+html[data-density="roomy"] .panel{padding:28px}
+html[data-density="roomy"] .msg{padding:14px 18px}
+html[data-density="roomy"] #feed,
+html[data-density="roomy"] #dmFeed{gap:14px}
+html[data-glass="off"] .epick,html[data-glass="off"] .toast,
+html[data-glass="off"] .gamewin{backdrop-filter:none}
+.hidden-by-search{display:none!important}
+
+/* ─────────────────────────── поля / кнопки ─────────────────────────── */
+input,select,button,textarea{font:inherit;color:inherit}
+input,select,textarea{
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);border-radius:var(--radius-sm);
+  padding:8px 12px;outline:none;
+  transition:border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+  font-variant-numeric:tabular-nums;
+}
+input:hover,select:hover,textarea:hover{border-color:var(--border2)}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--accent);box-shadow:var(--glow);background:var(--focus-bg)}
+input::placeholder,textarea::placeholder{color:var(--dim-2)}
+
+/* кнопки: primary — однотонный акцент, НЕ градиент */
+button{
+  background:var(--accent);border:1px solid var(--accent);
+  color:#fff;border-radius:var(--radius-sm);
+  padding:8px 14px;cursor:pointer;
+  font-weight:600;font-size:13px;letter-spacing:-.005em;
+  transition:transform var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+  box-shadow:var(--btn-shadow);
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+}
+button:hover{background:var(--accent2);border-color:var(--accent2);
+  transform:translateY(-.5px)}
+button:active{transform:translateY(0) scale(.985)}
+button.sec{
+  background:transparent;color:var(--text);border:1px solid var(--border2);
+  box-shadow:none}
+button.sec:hover{background:var(--sec-hover-bg);
+  border-color:var(--sec-hover-border);color:var(--text-strong);
+  transform:none}
+button:disabled{opacity:.4;cursor:default;transform:none!important;
+  background:var(--surface2)!important;border-color:var(--border)!important;
+  color:var(--dim)!important}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
+  border-radius:var(--radius-sm)}
+::selection{background:var(--accent-soft-strong);color:var(--text-strong)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* поля с подписями */
+.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:190px}
+.field>span{
+  color:var(--dim);font-size:10.5px;font-weight:600;user-select:none;
+  letter-spacing:.08em;text-transform:uppercase;
+}
+.field .opt{font-style:normal;color:var(--dim-2);font-weight:400;opacity:.9;
+  text-transform:none;letter-spacing:0;font-size:11px}
+.conn-grid{display:flex;gap:14px;flex-wrap:wrap}
+.chk{display:inline-flex;align-items:center;gap:8px;color:var(--dim);
+  font-size:12.5px;cursor:pointer;user-select:none}
+.chk input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.filebtn{
+  position:relative;overflow:hidden;display:inline-flex;align-items:center;
+  gap:7px;background:transparent;color:var(--text);
+  border:1px solid var(--border2);border-radius:var(--radius-sm);
+  padding:8px 14px;font-weight:600;font-size:13px;cursor:pointer;
+  transition:border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);user-select:none;
+}
+.filebtn:hover{border-color:var(--sec-hover-border);
+  background:var(--sec-hover-bg);color:var(--text-strong)}
+.filebtn input{position:absolute;left:-9999px;opacity:0;width:1px;height:1px}
+
+/* микро-лейбл секций — редакционный, не «плашка» */
+.subhead{
+  color:var(--dim);font-size:10.5px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;margin:24px 0 12px;user-select:none;
+  display:flex;align-items:center;gap:10px;
+}
+.subhead::after{content:"";flex:1;height:1px;background:var(--border)}
+.subhead .ico{font-size:13px;color:var(--dim)}
+
+/* ─────────────────────────── экран входа ─────────────────────────── */
+#connectPanel{
+  max-width:440px;margin:8vh auto 0;padding:32px 30px 26px;
+  background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-lg);
+  position:relative;
+}
+/* тонкая акцентная линия сверху — «дизайнерский» приём, не плашка */
+#connectPanel::before{
+  content:"";position:absolute;top:0;left:30px;right:30px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  opacity:.7;
+}
+.brandhero{display:flex;flex-direction:column;align-items:center;gap:10px;
+  margin-bottom:24px;text-align:center}
+.brandhero .logo{
+  width:56px;height:56px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;color:var(--accent);
+  background:var(--accent-soft);
+  border:1px solid var(--accent-border);
+  box-shadow:var(--logo-shadow);margin-bottom:4px;
+}
+.brandhero .logo .ico{font-size:28px;color:var(--accent)}
+.brandhero h1{font-size:22px;margin:0;letter-spacing:-.025em;font-weight:700;
+  color:var(--text-strong)}
+.brandhero p{margin:0;color:var(--dim);font-size:12.5px;letter-spacing:-.005em;
+  max-width:300px}
+#btnConnect{
+  width:100%;padding:11px;font-size:14px;margin-top:6px;font-weight:600;
+  letter-spacing:-.005em}
+#btnConnect .ico{font-size:16px}
+
+/* спойлер «как подключиться» — тонкая обводка, без отдельной заливки */
+.howto{
+  margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:transparent;padding:0 14px;
+}
+.howto summary{
+  cursor:pointer;color:var(--dim);font-size:11.5px;font-weight:600;
+  padding:10px 0;user-select:none;list-style:none;display:flex;
+  align-items:center;gap:7px;letter-spacing:.02em;
+  transition:color var(--dur-fast) var(--ease);
+}
+.howto summary::before{content:"";width:8px;height:8px;
+  border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
+  transform:rotate(-45deg);transition:transform var(--dur) var(--ease);
+  display:inline-block;margin-right:2px}
+.howto[open] summary::before{transform:rotate(45deg)}
+.howto summary:hover{color:var(--text)}
+.howto .hint{margin:0 0 12px;display:block;line-height:1.6;
+  font-size:12px;color:var(--dim)}
+
+/* ─────────────────────────── вкладки → социальный рейл ───────────────────────────
+   v3.2 «Studio Social»: горизонтальная линейка вкладок превратилась
+   в ПЛАВАЮЩИЙ ОСТРОВ СЛЕВА (как док в macOS): сверху — живые аватары
+   друзей (rail.js), в середине — навигация иконками с подписями,
+   внизу — свой док (аватар → профиль). Это сердце подхода «лучше
+   дискорда»: слева не мёртвые серверы, а люди.
+   До подключения (.tabs живёт внутри #app.hidden) рейла нет вовсе —
+   экран входа остаётся чистым. Мобильная версия — внизу (media 860). */
+.tabs{
+  position:fixed;left:16px;top:16px;bottom:16px;z-index:40;
+  width:76px;margin:0;
+  display:flex;flex-direction:column;flex-wrap:nowrap;
+  gap:6px;padding:12px 8px 10px;
+  background:var(--header-bg);
+  backdrop-filter:blur(var(--glass-blur)) saturate(1.35);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.35);
+  border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+html[data-glass="off"] .tabs{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* навигация: иконка сверху + подпись 10px снизу — читается быстрее,
+   чем иконки без подписей (друзья — не гики-дискордисты) */
+.tabs-nav{display:flex;flex-direction:column;gap:3px;flex:none}
+.tabs button{
+  position:relative;background:transparent;border:none;color:var(--dim);
+  padding:9px 2px 7px;font-weight:600;font-size:9.5px;box-shadow:none;
+  border-radius:12px;letter-spacing:.03em;line-height:1.25;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  transition:color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+  text-transform:uppercase;
+}
+.tabs button:hover{color:var(--text);transform:none;box-shadow:none;
+  background:transparent;filter:none}
+.tabs button.act{color:var(--accent);background:var(--accent-soft);box-shadow:none}
+/* активная вкладка — аккуратная плитка акцентного цвета (не черта) */
+.tabs button.act::after{content:none}
+.tabs button .ico{font-size:19px;opacity:.9}
+.tabs button.act .ico{opacity:1}
+.tabs button .ico-host{padding:0}
+.badge{
+  position:absolute;top:3px;right:6px;background:var(--accent);
+  color:#fff;font-size:9px;line-height:1;padding:2.5px 5px;border-radius:7px;
+  font-weight:700;min-width:16px;text-align:center;pointer-events:none;
+  border:2px solid var(--surface);font-variant-numeric:tabular-nums;
+  letter-spacing:0;z-index:2;
+  animation:bpop .35s var(--ease-out);
+}
+@keyframes bpop{0%{transform:scale(.4)}60%{transform:scale(1.22)}100%{transform:scale(1)}}
+
+/* ─────────────────────────── лента чата ─────────────────────────── */
+.chatTop{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.chatTop select{max-width:230px}
+.chatTop button{padding:7px 11px}
+#searchBox{max-width:220px;min-width:160px;padding:7px 11px 7px 32px;
+  background:var(--surface2) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="%239a9aa3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>') 10px 50%/14px no-repeat;
+  border-radius:var(--radius-pill)}
+#searchBox::placeholder{color:var(--dim-2)}
+#searchStat{white-space:nowrap;font-variant-numeric:tabular-nums}
+#feed,#dmFeed{
+  height:clamp(320px,56vh,640px);overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;gap:8px;padding:8px 4px 8px 2px;
+}
+#tab-chat{position:relative}
+#feed::-webkit-scrollbar,#dmFeed::-webkit-scrollbar{width:9px}
+#feed::-webkit-scrollbar-track,#dmFeed::-webkit-scrollbar-track{background:transparent}
+#feed::-webkit-scrollbar-thumb,#dmFeed::-webkit-scrollbar-thumb{
+  background:var(--scroll-thumb);border-radius:5px;border:2px solid var(--bg)}
+#feed::-webkit-scrollbar-thumb:hover,#dmFeed::-webkit-scrollbar-thumb:hover{
+  background:var(--scroll-thumb-hover)}
+
+/* пилюля «вниз ↓» */
+.jumppill{
+  position:absolute;bottom:78px;right:22px;z-index:5;
+  padding:7px 12px;font-size:12px;border-radius:var(--radius-pill);
+  box-shadow:var(--shadow);font-weight:600;letter-spacing:-.005em;
+}
+
+/* ── бабл сообщения ──
+   Убраны: градиент, тяжёлая тень, «дорогая» анимация.
+   Добавлены: 1px-граница, лёгкая тень только для отделения, тонкий хвост. */
+.msg{
+  max-width:78%;padding:9px 13px;
+  border-radius:12px 12px 12px 4px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  position:relative;display:flex;gap:10px;align-items:flex-start;
+  animation:msgIn .18s var(--ease-out);
+  transition:border-color var(--dur-fast) var(--ease);
+  box-shadow:0 1px 1px rgba(0,0,0,.18);
+}
+.msg:hover{border-color:var(--border2)}
+.msg.me{
+  align-self:flex-end;border-radius:12px 12px 4px 12px;
+  background:var(--me-bubble);border-color:var(--accent);color:#fff;
+  box-shadow:0 1px 1px rgba(0,0,0,.2);
+}
+.msg.me:hover{filter:none;border-color:var(--accent2)}
+@keyframes msgIn{from{opacity:0;transform:translateY(4px)}
+  to{opacity:1;transform:none}}
+.msg .who{font-size:11px;margin-bottom:2px;display:flex;gap:6px;align-items:baseline}
+.msg .who .nm{font-weight:600;color:var(--text-strong);letter-spacing:-.005em}
+.msg.me .who .nm{color:rgba(255,255,255,.95)}
+.msg .who .tm{color:var(--dim);font-size:10.5px;font-variant-numeric:tabular-nums;
+  letter-spacing:0;font-family:var(--font-mono);opacity:.85}
+.msg.me .who .tm{color:rgba(255,255,255,.82);opacity:1}
+.msg .txt{white-space:pre-wrap;word-break:break-word;font-size:13.5px;line-height:1.5}
+.msg .t{font-size:10px;color:var(--dim-2);margin-left:6px;
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.msg.file .txt a{color:var(--accent);text-decoration:none;font-weight:600;
+  transition:color var(--dur-fast) var(--ease)}
+.msg.file .txt a:hover{color:var(--accent2)}
+.msg.me.file .txt a{color:#fff;text-decoration:underline;text-underline-offset:2px}
+.msg .txt .hint{display:block;margin-top:3px;font-size:10.5px;color:var(--dim-2)}
+.msg.me .txt .hint{color:rgba(255,255,255,.66)}
+
+/* системная строка — тонкая, моно-капсом, без плашки */
+.sysline{
+  align-self:center;color:var(--dim-2);font-size:10.5px;font-weight:500;
+  letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 12px;background:transparent;border:none;
+  border-radius:var(--radius-pill);
+}
+.sysline::before,.sysline::after{content:"·";margin:0 8px;color:var(--dim-2)}
+
+/* ── Плагин «Сообщения»: стили баблов ── */
+html[data-bubbles="flat"] .msg{border-color:transparent;box-shadow:none;
+  background:var(--surface3)}
+html[data-bubbles="flat"] .msg.me{background:var(--accent);box-shadow:none}
+html[data-bubbles="outline"] .msg{background:transparent}
+html[data-bubbles="outline"] .msg.me{
+  background:transparent;color:var(--text);
+  border-color:var(--accent-border);box-shadow:none}
+html[data-bubbles="outline"] .msg.me .who .nm{color:var(--accent)}
+html[data-bubbles="outline"] .msg.me .who .tm{color:var(--dim-2)}
+html[data-bubbles="outline"] .msg.me .txt .hint{color:var(--dim-2)}
+html[data-bubbles="outline"] .msg.me .txt a,
+html[data-bubbles="outline"] .msg.me.file .txt a{color:var(--accent)}
+html[data-bubbles="outline"] .msg.me .txt code,
+html[data-bubbles="outline"] .msg.me .txt .mdcode{
+  background:var(--panel-soft);border-color:var(--border)}
+html[data-bubbles="outline"] .msg.me .txt blockquote{
+  color:var(--dim);background:var(--panel-soft);
+  border-left-color:var(--accent)}
+html[data-bubbles="outline"] .msg.me .rxn{
+  background:transparent;border-color:var(--pop-border);color:var(--text)}
+html[data-bubbles="outline"] .msg.me .rxn:hover{background:var(--hover-chip)}
+html[data-bubbles="outline"] .msg.me .lprev{
+  background:var(--panel-soft);border-left-color:var(--accent)}
+/* «Чернила»: баблы без рамок, без теней — чистая типографика.
+   «Себя» = однотонный акцент (как Linear/Vercel), чужой = слегка
+   приподнятая поверхность без границы. Минимализм ради читаемости. */
+html[data-bubbles="ink"] .msg{
+  background:transparent;border-color:transparent;box-shadow:none;
+  padding-left:0;padding-right:0;
+}
+html[data-bubbles="ink"] .msg:hover{border-color:transparent}
+html[data-bubbles="ink"] .msg:not(.me){
+  background:var(--surface2);border-color:transparent;box-shadow:none;
+  padding:9px 13px;border-radius:10px;
+}
+html[data-bubbles="ink"] .msg.me{
+  background:var(--accent);border-color:transparent;box-shadow:none;
+  padding:9px 13px;border-radius:10px;
+}
+html[data-avatars="off"] .bava{display:none}
+
+/* аватар — маленький квадрат со скруглением 8px (не круг) */
+.bava{
+  flex:none;width:28px;height:28px;border-radius:8px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:#fff;font-size:11px;font-weight:700;letter-spacing:-.02em;
+  margin-top:1px;user-select:none;
+  background:var(--surface3);border:1px solid var(--border2);
+  font-variant-numeric:tabular-nums;
+}
+.mbody{display:flex;flex-direction:column;min-width:0}
+
+/* композер — чистая пилюля, без «дорогих» теней */
+#composer,#dmComposer{
+  display:flex;gap:6px;margin-top:14px;align-items:center;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-pill);padding:5px 5px 5px 6px;
+  transition:border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+#composer:focus-within,#dmComposer:focus-within{
+  border-color:var(--accent);box-shadow:var(--glow)}
+#composer input,#dmComposer input{
+  flex:1;background:transparent;border:none;padding:9px 10px;
+  border-radius:var(--radius-pill);min-width:0;color:var(--text)}
+#composer input:focus,#dmComposer input:focus{
+  box-shadow:none;background:transparent}
+#btnEmoji{
+  background:transparent;box-shadow:none;border:none;padding:6px 9px;
+  font-size:14px;color:var(--dim);border-radius:50%;width:32px;height:32px;
+}
+#btnEmoji:hover{transform:none;box-shadow:none;background:var(--hover-chip);
+  filter:none;color:var(--text)}
+#btnEmoji .ico{font-size:18px}
+#btnSend,#btnDmSend{
+  flex:none;width:34px;height:34px;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:14px;
+  background:var(--accent);border-color:var(--accent);color:#fff;
+}
+#btnSend:hover,#btnDmSend:hover{background:var(--accent2);
+  border-color:var(--accent2);transform:none}
+#btnSend .ico,#btnDmSend .ico{font-size:15px}
+.filebtn.dmbtn{
+  flex:none;width:34px;height:34px;padding:0;border-radius:50%;
+  justify-content:center;font-size:14px;gap:0;
+}
+.filebtn.dmbtn .ico{font-size:14px}
+
+/* мини-пикер эмодзи */
+.epick{
+  position:fixed;z-index:60;display:grid;grid-template-columns:repeat(8,1fr);gap:2px;
+  background:var(--surface);border:1px solid var(--pop-border);
+  border-radius:var(--radius);padding:8px;box-shadow:var(--shadow-pop);
+}
+.epick span{cursor:pointer;font-size:19px;padding:4px;border-radius:6px;
+  text-align:center;transition:background var(--dur-fast) var(--ease);
+  user-select:none}
+.epick span:hover{background:var(--accent-soft)}
+
+/* (v3.5.5) пикер реакций у сообщений — пилюля в стиле панели действий.
+   Стили переехали из инлайна chat.js: раньше их нельзя было навести
+   (hover не бывает инлайном), и эмодзи выглядели сиротливо. */
+.rpicker{
+  display:flex;gap:2px;align-items:center;
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:var(--radius-pill);padding:4px 7px;
+  box-shadow:var(--shadow-pop);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.rpicker span{
+  cursor:pointer;font-size:17px;line-height:1;padding:3px 5px;
+  border-radius:50%;user-select:none;
+  transition:background var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.rpicker span:hover{background:var(--accent-soft);transform:scale(1.15)}
+.rpicker span:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* реакции — пружинка на появление (v3.2 «живой интерфейс») */
+.msg .rx{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.msg .rx:empty{display:none}
+.rxn{
+  display:inline-flex;align-items:center;gap:5px;padding:2px 9px;font-size:12.5px;
+  border-radius:var(--radius-pill);background:var(--surface);
+  border:1px solid var(--border2);cursor:pointer;user-select:none;
+  color:var(--text);font-variant-numeric:tabular-nums;
+  animation:rxnIn .18s var(--ease-out);
+  transition:transform var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+@keyframes rxnIn{from{transform:scale(.55);opacity:0}
+  to{transform:scale(1);opacity:1}}
+.rxn:hover{transform:none;border-color:var(--accent);background:var(--accent-soft)}
+.rxn.mine{border-color:var(--accent-border);background:var(--accent-soft);
+  color:var(--accent)}
+.msg.me .rxn{background:rgba(255,255,255,.14);border-color:transparent;color:#fff}
+.msg.me .rxn:hover{background:rgba(255,255,255,.24)}
+.msg.me .rxn.mine{background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.5)}
+.rxn .cnt{font-size:11.5px;color:var(--dim);font-weight:600}
+.msg.me .rxn .cnt{color:rgba(255,255,255,.85)}
+
+/* плавающая панель действий — пилюля НАД углом бабла (v3.5.5).
+   Раньше панель выезжала СБОКУ от бабла (translateX(100%)) — рвалась
+   на краю ленты, наезжала на соседние сообщения и выглядела чужой.
+   Теперь — компактная пилюля с blur над правым углом (для своих —
+   над левым): как в Telegram/Slack, нигде не обрезается. */
+.msg .acts{
+  position:absolute;top:-16px;display:flex;gap:2px;padding:3px;
+  z-index:6;right:10px;opacity:0;visibility:hidden;pointer-events:none;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-pill);
+  box-shadow:var(--shadow-pop);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transform:translateY(4px) scale(.96);transform-origin:center bottom;
+  transition:opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease),
+    visibility 0s linear var(--dur-fast);
+}
+.msg:hover .acts,.msg .acts:focus-within{
+  opacity:1;visibility:visible;pointer-events:auto;
+  transform:translateY(0) scale(1);
+  transition:opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.msg.me .acts{right:auto;left:10px}
+/* круглые «призрачные» кнопки: всплывают цветом и подложкой, без прыжков */
+.msg .acts button{
+  width:26px;height:26px;padding:0;display:inline-flex;align-items:center;
+  justify-content:center;background:transparent;border:none;color:var(--dim);
+  border-radius:50%;cursor:pointer;
+  transition:background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.msg .acts button .ico{font-size:14px;display:block}
+.msg .acts button:hover{color:var(--accent);background:var(--accent-soft);
+  transform:none;box-shadow:none;filter:none}
+.msg .acts button:active{transform:scale(.9)}
+.msg .acts button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.msg .pin{color:var(--warn);margin-right:4px;display:inline-flex;
+  vertical-align:-.15em}
+.msg .pin .ico{font-size:12px}
+
+/* индикатор «печатает» */
+.tdots{display:inline-flex;gap:3px;margin-right:6px;align-items:center}
+.tdots i{width:4px;height:4px;border-radius:50%;background:var(--accent);
+  animation:tb 1.2s infinite;animation-delay:calc(var(--i)*.18s)}
+@keyframes tb{0%,60%,100%{transform:translateY(0);opacity:.4}
+  30%{transform:translateY(-3px);opacity:1}}
+.typing-pill{
+  display:inline-flex;align-items:center;padding:4px 12px;font-size:11.5px;
+  color:var(--dim);background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-pill);letter-spacing:-.005em;
+}
+
+/* ─────────────────────────── файлы ─────────────────────────── */
+.filerow{
+  display:flex;align-items:center;gap:12px;padding:11px 14px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);flex-wrap:wrap;margin-bottom:8px;
+  transition:border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+.filerow:hover{border-color:var(--border2);background:var(--surface3)}
+/* v3.2: иконка типа файла — плитка 38px с иконкой из спрайта,
+   цвет — акцент (тип читается формой иконки) */
+.filerow .fico{
+  flex:none;width:38px;height:38px;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--accent);
+}
+.filerow .fico .ico{font-size:19px}
+.filerow .nm{flex:1;min-width:160px;word-break:break-all;font-weight:600;
+  font-size:13px;letter-spacing:-.005em}
+.filerow .fown{
+  flex:none;color:var(--dim);font-size:10.5px;padding:2px 9px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-pill);text-transform:uppercase;
+  letter-spacing:.06em;font-weight:600;
+}
+.filerow .sz{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+.pbar{height:3px;background:var(--surface);border-radius:2px;overflow:hidden;
+  margin-top:5px;width:100%}
+.pbar>div{height:100%;background:var(--accent);width:0%;
+  transition:width .2s var(--ease)}
+.dlstat{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+/* ─────────────────────────── таблицы/подсказки ─────────────────────────── */
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td{padding:9px 6px;border-bottom:1px solid var(--border);vertical-align:top;
+  font-size:12.5px}
+td:first-child{color:var(--dim);width:44%;font-weight:500;
+  text-transform:uppercase;letter-spacing:.06em;font-size:10.5px}
+.warn{color:var(--err);font-size:12px;min-height:18px;letter-spacing:-.005em}
+.warn div{margin:2px 0}
+.warn a{color:inherit;text-decoration:underline;word-break:break-all}
+.hint{color:var(--dim);font-size:11.5px;line-height:1.55;letter-spacing:-.005em}
+
+/* ─────────────────────────── профиль ─────────────────────────── */
+.profcards{display:flex;flex-direction:column;gap:16px}
+.profhead{display:flex;gap:18px;align-items:center;padding:16px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius)}
+.bigavatar{
+  width:72px;height:72px;border-radius:14px;flex:none;
+  display:flex;align-items:center;justify-content:center;color:#fff;
+  font-size:24px;font-weight:700;user-select:none;
+  background-size:cover;background-position:center;
+  border:1px solid var(--border2);
+}
+.profhead-info{display:flex;flex-direction:column;gap:3px;min-width:0}
+.profName{font-size:20px;font-weight:700;letter-spacing:-.025em;
+  color:var(--text-strong)}
+.profStatus{color:var(--dim);font-size:12.5px;font-style:italic;
+  letter-spacing:-.005em}
+.profrow{display:flex;gap:14px;flex-wrap:wrap}
+textarea{resize:vertical;min-height:64px;border-radius:var(--radius-sm);
+  font-family:var(--font-stack)}
+.friendslist{display:flex;flex-direction:column;gap:6px}
+.friendrow{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);transition:border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);cursor:pointer;
+}
+.friendrow:hover{border-color:var(--border2);background:var(--surface3)}
+.friendrow.off{opacity:.55}
+.friendrow.off .frienddot{background:var(--dim-2);box-shadow:none}
+.friendava{flex:none;width:32px;height:32px;border-radius:8px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:#fff;font-size:11.5px;font-weight:700;letter-spacing:-.02em}
+.friendinfo{display:flex;flex-direction:column;min-width:0;flex:1}
+.friendname{font-weight:600;font-size:13px;letter-spacing:-.01em;
+  color:var(--text-strong)}
+.friendstatus{color:var(--dim);font-size:11px;font-style:italic;
+  letter-spacing:-.005em}
+.frienddot{
+  flex:none;width:8px;height:8px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 0 3px rgba(74,222,128,.12)}
+.frdel{padding:5px 10px;font-size:11.5px}
+
+/* ─────────────────────────── голос ─────────────────────────── */
+.voiceset{display:flex;flex-wrap:wrap;gap:14px}
+.voiceset .field{min-width:230px}
+input[type=range]{-webkit-appearance:none;appearance:none;height:24px;
+  background:transparent;border:none;padding:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:4px;
+  background:var(--surface3);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:14px;height:14px;border-radius:50%;background:var(--accent);margin-top:-5px;
+  box-shadow:var(--thumb-shadow);cursor:grab;
+  border:2px solid var(--surface)}
+input[type=range]::-moz-range-track{height:4px;background:var(--surface3);
+  border-radius:2px}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border:2px solid var(--surface);
+  border-radius:50%;background:var(--accent)}
+.meter{height:5px;background:var(--surface3);border-radius:3px;overflow:hidden;
+  margin-top:5px}
+.meter>div{height:100%;width:0%;background:var(--accent);border-radius:3px;
+  transition:width .08s linear}
+.vperson{
+  display:flex;align-items:center;gap:12px;padding:9px 14px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);margin-bottom:6px;color:var(--dim);
+  transition:border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+.vperson.spk{border-color:var(--ok);color:var(--text-strong);
+  box-shadow:0 0 0 3px rgba(74,222,128,.08)}
+.vava{flex:none;width:30px;height:30px;border-radius:8px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:#fff;font-size:11px;font-weight:700;letter-spacing:-.02em}
+.vname{flex:1;font-weight:600;font-size:13px;letter-spacing:-.01em;
+  color:var(--text-strong)}
+/* v3.2: статус участника канала — иконки из спрайта вместо эмодзи:
+   говорит (микрофон, зелёная пульсация) / выключен (перечёркнутый,
+   красный) / просто в канале (маленькая точка) */
+.vmic{display:inline-flex;align-items:center;color:var(--dim-2);flex:none}
+.vmic .ico{font-size:16px}
+.vmic.on{color:var(--ok)}
+.vmic.on .ico{animation:vmicPulse 1.4s var(--ease-out) infinite}
+.vmic.mut{color:var(--err)}
+.vmic.idle .ico{font-size:10px;opacity:.6}
+@keyframes vmicPulse{
+  0%{opacity:1}50%{opacity:.45}100%{opacity:1}}
+/* говорящий — зелёный пульс кольца вокруг аватара (DESIGN_STYLE.md) */
+.vperson.spk .vava{animation:spkRing 1.6s var(--ease-out) infinite}
+@keyframes spkRing{
+  0%{box-shadow:0 0 0 0 rgba(74,222,128,.42)}
+  70%{box-shadow:0 0 0 8px rgba(74,222,128,0)}
+  100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
+#micTestAudio{width:100%;max-width:430px;margin-top:8px;display:block}
+#micTestVerdict{margin-top:6px;font-weight:600}
+
+/* ─────────────────────────── ЛС ─────────────────────────── */
+#dmPeer{max-width:260px}
+
+/* ─────────────────────────── тосты ─────────────────────────── */
+#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;
+  gap:8px;z-index:300;pointer-events:none}
+.toast{
+  background:var(--toast-bg);
+  backdrop-filter:blur(8px) saturate(1.2);
+  -webkit-backdrop-filter:blur(8px) saturate(1.2);
+  border:1px solid var(--border2);border-left:3px solid var(--ok);
+  color:var(--text);padding:11px 16px;border-radius:var(--radius);
+  font-size:12.5px;max-width:340px;letter-spacing:-.005em;
+  box-shadow:var(--shadow);opacity:0;transform:translateY(8px);
+  transition:opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+  display:flex;align-items:center;gap:9px;
+}
+.toast .ico{flex:none;font-size:14px;color:var(--ok)}
+.toast.err{border-left-color:var(--err)}
+.toast.err .ico{color:var(--err)}
+.toast.show{opacity:1;transform:none}
+
+/* ─────────────────────────── шахматы ─────────────────────────── */
+#chessWrap{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+#board{
+  display:grid;grid-template-columns:repeat(8,44px);
+  grid-template-rows:repeat(8,44px);
+  border:1px solid var(--border2);border-radius:4px;overflow:hidden;
+  user-select:none;width:max-content;
+  box-shadow:var(--shadow-sm);
+}
+.sq{display:flex;align-items:center;justify-content:center;font-size:29px;
+  position:relative;line-height:1}
+.sq.l{background:#e8d8be}.sq.d{background:#8a6f4d}
+.sq.mine,.sq.mv{cursor:pointer}
+.sq.sel{box-shadow:inset 0 0 0 3px var(--accent)}
+.sq.mv::after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;
+  background:var(--accent-soft-strong)}
+.sq.last{box-shadow:inset 0 0 0 3px rgba(74,222,128,.55)}
+.sq.sel.last{box-shadow:inset 0 0 0 3px var(--accent),inset 0 0 0 6px rgba(74,222,128,.55)}
+#movesBox{min-width:190px;max-width:270px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+#moveList{max-height:220px;overflow-y:auto;
+  font:11.5px/1.7 var(--font-mono);color:var(--dim);
+  font-variant-numeric:tabular-nums}
+
+/* ─────────────────────────── превью ссылок ─────────────────────────── */
+.lprev{display:flex;gap:11px;margin-top:7px;padding:10px 12px;
+  border:1px solid var(--border);border-left:2px solid var(--accent);
+  border-radius:var(--radius);background:var(--panel-soft);
+  text-decoration:none;color:inherit;max-width:430px;flex-wrap:wrap;
+  transition:border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease)}
+.lprev:hover{border-color:var(--accent);background:var(--accent-soft)}
+.msg.me .lprev{background:rgba(255,255,255,.10);border-left-color:rgba(255,255,255,.7)}
+.lprev-i{width:56px;height:56px;object-fit:cover;border-radius:5px;flex:none}
+.lprev-t{font-size:12.5px;font-weight:600;color:var(--text-strong);overflow:hidden;
+  text-overflow:ellipsis;max-width:100%;letter-spacing:-.01em}
+.lprev-d{font-size:11px;color:var(--dim);display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  letter-spacing:-.005em}
+
+/* ─────────────────────────── панель пинов ─────────────────────────── */
+.pinpanel{
+  position:relative;z-index:8;margin:-2px 0 12px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+.pinpanel-head{
+  display:flex;align-items:center;gap:8px;padding:9px 14px;
+  color:var(--dim);font-size:10.5px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;border-bottom:1px solid var(--border);
+  background:var(--surface2);
+}
+.pinpanel-head button{margin-left:auto;padding:4px 10px;font-size:11px}
+#pinList{max-height:250px;overflow-y:auto;padding:4px}
+.pinrow{
+  display:flex;align-items:baseline;gap:8px;padding:8px 10px;
+  border-radius:6px;cursor:pointer;
+  transition:background var(--dur-fast) var(--ease);
+}
+.pinrow:hover{background:var(--accent-soft)}
+.pinrow .pwho{flex:none;font-weight:600;font-size:12px;letter-spacing:-.01em}
+.pinrow .ptm{flex:none;color:var(--dim-2);font-size:10px;
+  font-variant-numeric:tabular-nums}
+.pinrow .ptxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-size:12.5px;letter-spacing:-.005em}
+.pinrow .pjump{flex:none;color:var(--accent);font-size:11px;font-weight:600;
+  letter-spacing:.02em;text-transform:uppercase}
+.pinrow.off{opacity:.6;cursor:default}
+@keyframes flashIn{0%{box-shadow:0 0 0 3px var(--accent)}
+  100%{box-shadow:0 0 0 3px transparent}}
+.msg.flash{animation:flashIn 1.6s var(--ease-out)}
+
+/* ─────────────────────────── мини-маркдаун ─────────────────────────── */
+.msg .txt code,.msg .txt .mdcode{
+  font-family:var(--font-mono);font-size:12px;line-height:1.5;
+}
+.msg .txt code{
+  background:var(--panel-soft);border:1px solid var(--border);
+  border-radius:4px;padding:1px 5px;font-variant-numeric:tabular-nums;
+}
+.msg.me .txt code{background:rgba(255,255,255,.16);border-color:transparent}
+.msg .txt .mdcode{
+  display:block;background:var(--panel-soft);border:1px solid var(--border);
+  border-radius:6px;padding:8px 10px;margin:6px 0;overflow-x:auto;
+  white-space:pre;
+}
+.msg.me .txt .mdcode{background:rgba(255,255,255,.14);border-color:transparent}
+.msg .txt blockquote{
+  margin:4px 0;padding:2px 10px;border-left:2px solid var(--accent);
+  color:var(--dim);background:var(--panel-soft);border-radius:0 6px 6px 0;
+}
+.msg.me .txt blockquote{color:rgba(255,255,255,.82);
+  background:rgba(255,255,255,.10);border-left-color:rgba(255,255,255,.6)}
+.msg .txt a{color:var(--accent);text-decoration:underline;
+  text-underline-offset:2px;word-break:break-all;
+  text-decoration-color:var(--accent-border)}
+.msg.me .txt a{color:#fff;text-decoration-color:rgba(255,255,255,.5)}
+/* v3: in-app приглашения (friendrelay://) — как «кнопка-ссылка»,
+   заметнее обычной ссылки, с акцентным фоном и hover-эффектом */
+.msg .txt a[href^="friendrelay://"]{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 12px;margin:4px 0;
+  background:var(--accent-soft);
+  border:1px solid var(--accent-border);
+  border-radius:var(--radius-pill);
+  color:var(--accent);text-decoration:none;font-weight:600;
+  font-size:12.5px;letter-spacing:-.005em;
+  transition:background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+  word-break:keep-all;
+}
+.msg .txt a[href^="friendrelay://"]:hover{
+  background:var(--accent);color:#fff;border-color:var(--accent);
+  transform:translateY(-1px);
+}
+.msg .txt a[href^="friendrelay://"]::before{
+  content:"\25B6";font-size:10px;opacity:.9;
+}
+.msg.me .txt a[href^="friendrelay://"]{
+  background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.4);
+  color:#fff;
+}
+.msg.me .txt a[href^="friendrelay://"]:hover{
+  background:rgba(255,255,255,.32);color:#fff;
+}
+
+/* ─────────────────────────── шахматы: рейтинг ─────────────────────────── */
+#lbBox table{margin-top:6px}
+#lbBox td{padding:6px 8px}
+#lbBox .lbrank{width:34px;color:var(--dim);font-weight:600}
+#lbBox tr.merow td{background:var(--accent-soft)}
+#lbBox .lbelo{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+#lbBox .lbrec{color:var(--dim);font-size:11px;white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+
+/* ─────────────────────────── адаптив ───────────────────────────
+   v3.2: мобильная компоновка — в конце файла (после app-shell):
+   рейл-остров разворачивается в нижнюю панель. Здесь — только
+   мелкие плотностные правки узких экранов. */
+@media (max-width:640px){
+  main{padding:16px 14px 30px}
+  .panel{padding:18px}
+  .msg{max-width:88%}
+  #connectPanel{margin-top:3vh;padding:24px 20px}
+  #searchBox{max-width:none;flex:1}
+  header{padding:11px 14px;gap:10px}
+  #hostInfo{display:none}
+  .h-brand{padding-right:12px}
+  .h-tools .h-divider{margin:0 2px}
+  #board{grid-template-columns:repeat(8,min(40px,10.8vw));
+    grid-template-rows:repeat(8,min(40px,10.8vw))}
+  .sq{font-size:24px}
+}
+@media (max-width:480px){
+  #board{grid-template-columns:repeat(8,min(36px,11vw));
+    grid-template-rows:repeat(8,min(36px,11vw))}
+  .sq{font-size:21px}
+}
+@media (hover:none){
+  /* тач: панель действий видна всегда (наведения нет). v3.5.5: пилюля
+     висит НАД баблом, поэтому «всегда видима» больше не рвёт вёрстку */
+  .msg .acts{opacity:1;visibility:visible;pointer-events:auto;
+    transform:translateY(0) scale(1)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+
+/* ───────────────────── Игры — лаунчер карточек (Studio v3) ─────────────
+   Карточки с красивыми цветными иконками вместо эмодзи. У «избранных»
+   встроенных игр (шахмат) — своя секция сверху, отдельный акцент. */
+.gamesgrid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:12px;
+}
+/* секция «избранных» игр (встроенных — chess и будущие) */
+.games-featured{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:12px;margin-bottom:18px;
+}
+.games-section-title{
+  display:flex;align-items:center;gap:8px;margin:0 0 10px;
+  font-size:10.5px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dim);
+}
+.games-section-title .ico{font-size:13px;color:var(--accent)}
+.games-section-title::after{content:"";flex:1;height:1px;background:var(--border)}
+
+.gamecard{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 16px;cursor:pointer;
+  display:flex;flex-direction:column;gap:6px;min-height:148px;
+  transition:transform var(--dur) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+  position:relative;overflow:hidden;
+}
+.gamecard:hover{
+  transform:translateY(-2px);border-color:var(--accent-border);
+  background:var(--surface3);
+  box-shadow:0 6px 20px rgba(0,0,0,.22);
+}
+.gamecard.off{opacity:.5;cursor:not-allowed;filter:grayscale(.7)}
+.gamecard.off:hover{transform:none;background:var(--surface2);
+  border-color:var(--border);box-shadow:none}
+
+/* большая иконка игры — квадрат со скруглением и акцентным фоном */
+.gameicon{
+  width:52px;height:52px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent-soft);border:1px solid var(--accent-border);
+  color:var(--accent);margin-bottom:8px;flex:none;
+}
+.gameicon .ico{font-size:26px;color:var(--accent)}
+/* запасной класс .gameemoji (если игра прислала эмодзи) — тоже красивая плитка */
+.gameemoji{
+  width:52px;height:52px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent-soft);border:1px solid var(--accent-border);
+  margin-bottom:8px;flex:none;font-size:28px;line-height:1;
+}
+/* «избранная» карточка (chess) — чуть крупнее и с обводкой акцента */
+.gamecard.featured{
+  background:linear-gradient(135deg,
+    var(--surface2) 0%,
+    color-mix(in srgb,var(--accent-soft) 50%,var(--surface2)) 100%);
+  border-color:var(--accent-border);
+}
+.gamecard.featured:hover{
+  border-color:var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.28)}
+.gamecard.featured .gameicon{
+  background:var(--accent);color:#fff;border-color:var(--accent)}
+.gamecard.featured .gameicon .ico{color:#fff}
+.gamecard.featured .gamemode{color:var(--accent)}
+.gametitle{font-weight:700;font-size:14.5px;letter-spacing:-.02em;
+  color:var(--text-strong)}
+.gamedesc{color:var(--dim);font-size:12px;flex:1;letter-spacing:-.005em;
+  line-height:1.5}
+.gamemode{font-size:10px;color:var(--accent);font-weight:700;
+  text-transform:uppercase;letter-spacing:.12em;
+  display:inline-flex;align-items:center;gap:5px}
+.gamemode::before{content:"";width:5px;height:5px;border-radius:50%;
+  background:var(--accent)}
+
+/* подвид шахмат внутри вкладки «Игры» — отдельная «страница»
+   с кнопкой «← к играм». Скрывается классом .hidden. */
+.chess-subview{margin-top:14px}
+.chess-back{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 14px;font-size:12.5px;font-weight:600;
+  background:transparent;border:1px solid var(--border2);
+  color:var(--dim);border-radius:var(--radius-pill);
+  cursor:pointer;transition:all var(--dur-fast) var(--ease);
+  margin-bottom:14px;
+}
+.chess-back:hover{color:var(--text-strong);border-color:var(--accent);
+  background:var(--accent-soft);transform:none}
+.chess-back .ico{font-size:14px}
+
+/* окно игры: оверлей + панель с заголовком */
+.gamewin{
+  position:fixed;inset:0;z-index:220;
+  background:rgba(5,6,10,.78);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;padding:18px;
+}
+.gamewin-bar{
+  width:min(960px,100%);display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:8px 12px;
+  box-shadow:var(--shadow);
+}
+.gamewin-bar b{font-size:13px;font-weight:600;letter-spacing:-.01em}
+.gamewin-frame{
+  width:min(960px,100%);height:min(78vh,700px);
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg);box-shadow:var(--shadow);
+}
+@media (max-width:640px){
+  .gamewin{padding:8px}
+  .gamewin-frame{height:min(72vh,600px)}
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Appearance Studio (v2.0.8): панель оформления
+   ─────────────────────────────────────────────────────────────────────
+   Все плагины и ключи сохранены (appearance.js не трогаем по существу).
+   Стили переосмыслены под Studio-логику: меньше «тёплых» теней,
+   чище карточки, акцентная полоска вместо заливки.
+   ═══════════════════════════════════════════════════════════════════════ */
+.ux-overlay{
+  position:fixed;inset:0;z-index:240;background:rgba(5,6,10,.55);
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+}
+.ux-drawer{
+  position:fixed;top:0;right:0;bottom:0;z-index:250;
+  width:min(390px,100vw);display:flex;flex-direction:column;
+  background:var(--surface);border-left:1px solid var(--border);
+  box-shadow:var(--shadow);animation:uxIn .26s var(--ease-out);
+}
+@keyframes uxIn{from{opacity:0;transform:translateX(20px)}
+  to{opacity:1;transform:none}}
+.ux-head{
+  display:flex;align-items:flex-start;gap:10px;padding:18px 20px 14px;
+  border-bottom:1px solid var(--border);
+}
+.ux-head-tt{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.ux-head-tt b{font-size:15px;letter-spacing:-.02em;font-weight:700;
+  color:var(--text-strong)}
+.ux-head-tt .hint{line-height:1.45;font-size:11.5px}
+.ux-head button{padding:6px 10px;font-size:12px}
+.ux-io{display:flex;gap:8px;padding:12px 18px 0}
+.ux-io button{flex:1;padding:6px 10px;font-size:11.5px;font-weight:600}
+.ux-body{
+  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
+  padding:14px 18px 18px;
+}
+.ux-body::-webkit-scrollbar{width:8px}
+.ux-body::-webkit-scrollbar-track{background:transparent}
+.ux-body::-webkit-scrollbar-thumb{background:var(--scroll-thumb);
+  border-radius:8px}
+.ux-body::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover)}
+.uxcard{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 15px;
+  transition:border-color var(--dur) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+.uxcard:hover{border-color:var(--border2);background:var(--surface3)}
+.uxcard-head{display:flex;align-items:center;gap:11px}
+.uxcard-ico{
+  flex:none;width:30px;height:30px;display:inline-flex;align-items:center;
+  justify-content:center;border-radius:8px;background:var(--accent-soft);
+  font-size:13px;color:var(--accent);border:1px solid var(--accent-border);
+}
+.uxcard-ico .ico{font-size:15px;color:var(--accent)}
+.uxcard-tt{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.uxcard-tt b{font-size:13px;letter-spacing:-.01em;font-weight:600;
+  color:var(--text-strong)}
+.uxcard-tt small{color:var(--dim);font-size:11px;line-height:1.4;
+  letter-spacing:-.005em}
+.uxcard-body{display:flex;flex-direction:column;gap:12px;margin-top:13px}
+.uxcard-body.uxoff{opacity:.4;pointer-events:none}
+
+/* тумблер — минимал, без «дорогих» теней */
+.uxswitch{position:relative;flex:none;width:36px;height:21px;cursor:pointer;
+  display:inline-block}
+.uxswitch input{position:absolute;opacity:0;width:1px;height:1px}
+.uxswitch i{
+  position:absolute;inset:0;border-radius:999px;background:var(--surface3);
+  border:1px solid var(--border2);
+  transition:background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+.uxswitch i::after{
+  content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;
+  border-radius:50%;background:var(--dim);
+  transition:transform var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+.uxswitch input:checked + i{background:var(--accent);
+  border-color:var(--accent)}
+.uxswitch input:checked + i::after{transform:translateX(15px);
+  background:#fff}
+.uxswitch input:focus-visible + i{box-shadow:var(--glow)}
+
+/* сегмент-контрол */
+.uxseg{
+  display:flex;gap:2px;background:var(--surface3);
+  border:1px solid var(--border);border-radius:8px;padding:3px;
+}
+.uxseg button{
+  flex:1;background:transparent;border:none;color:var(--dim);
+  padding:6px 8px;font-size:11.5px;font-weight:600;border-radius:5px;
+  box-shadow:none;letter-spacing:-.005em;
+}
+.uxseg button:hover{transform:none;filter:none;box-shadow:none;
+  background:var(--hover-chip);color:var(--text)}
+.uxseg button.act{background:var(--accent);color:#fff;
+  border-color:var(--accent);box-shadow:none}
+.uxseg button.act:hover{background:var(--accent2)}
+
+/* свотчи акцентного цвета — однотонные круги (не градиент) */
+.uxswatches{display:flex;flex-wrap:wrap;gap:8px}
+.uxswatch{
+  width:28px;height:28px;border-radius:50%;padding:0;cursor:pointer;
+  border:2px solid transparent;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+  transition:transform var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+.uxswatch:hover{transform:scale(1.1);filter:none}
+.uxswatch.act{border-color:var(--text-strong)}
+/* «Как в теме» — диагональная полоска вместо радуги */
+.uxswatch[data-default="1"]{
+  background:repeating-linear-gradient(45deg,
+    var(--accent) 0 6px,var(--accent2) 6px 12px);
+}
+
+.uxrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.uxrow .lbl{font-size:12px;color:var(--dim);font-weight:500;letter-spacing:-.005em}
+.uxrow output{font-size:11.5px;font-weight:600;color:var(--accent);
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.uxrange{display:flex;flex-direction:column;gap:5px}
+input[type=range].uxr{width:100%}
+.uxcolor{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.uxcolor .lbl{font-size:12px;color:var(--dim);font-weight:500}
+.uxcolor input[type=color]{
+  width:38px;height:30px;padding:2px;border-radius:6px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--border2);
+}
+.uxcss{
+  width:100%;min-height:110px;resize:vertical;
+  font:11.5px/1.6 var(--font-mono);
+  background:var(--bg);color:var(--text);
+  border:1px solid var(--border2);
+}
+.uxcss:focus{border-color:var(--accent);box-shadow:var(--glow)}
+.ux-foot{
+  display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--border);
+}
+.ux-foot button{flex:1;font-size:11.5px;font-weight:600;padding:8px 10px}
+@media (max-width:640px){
+  .ux-drawer{width:100vw;border-left:none}
+}
+
+/* ── фокус-ринг для клавиатуры — аккуратный, не «AI-сияние» ── */
+button:focus-visible,input:focus-visible,select:focus-visible,
+textarea:focus-visible,.uxswitch input:focus-visible + i{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v3.2 «Studio Social» — app-shell, рейл, модалки, палитра
+   ─────────────────────────────────────────────────────────────────────
+   Порядок слоёв (снизу вверх): рейл 40 < шапка 20 (в потоке) < эмодзи 60
+   < rpicker 50 < gameWin 220 < uxOverlay 240 < uxDrawer 250 < frmodal 270
+   < frpal 280 < toasts 300.
+
+   Совместимость: все CSS-переменные и data-атрибуты Appearance Studio
+   читаются как раньше — кастомизация пользователя неприкосновенна.
+   Новый layout включается ТОЛЬКО классом body.app-on (main.js ставит
+   его после подключения) — экран входа живёт по-старому.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── App-shell: хром приложения неподвижен, контент скроллится внутри ──
+   Это главный «дорогой» приём: страница перестаёт прыгать скроллом,
+   чат заполняет всё доступное место, композер всегда прижат к низу.
+   Свернуто до самого маленького экрана — ни одного пикселя впустую. */
+body.app-on{
+  height:100dvh;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+body.app-on header{flex:none;padding-left:118px}   /* слева — рейл-остров */
+body.app-on main{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  max-width:none;
+  margin:0;
+  padding:14px 18px 14px 118px;   /* слева — место под рейл-остров */
+}
+body.app-on #app{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
+  width:100%;max-width:940px;
+  margin:0 auto;
+}
+/* панели-вкладки: каждая скроллится внутри себя */
+body.app-on .panel{
+  flex:1;min-height:0;
+  overflow-y:auto;
+  margin-bottom:0;
+  animation:panIn .2s var(--ease-out);
+}
+@keyframes panIn{from{opacity:0;transform:translateY(7px)}
+  to{opacity:1;transform:none}}
+/* чат и ЛС — особые: лента тянется, композер прижат к низу панели */
+body.app-on #tab-chat,
+body.app-on #tab-dm{
+  display:flex;flex-direction:column;overflow:hidden;
+}
+body.app-on #tab-chat #feed,
+body.app-on #tab-dm #dmFeed{
+  flex:1;min-height:120px;height:auto;
+}
+body.app-on #tab-chat #composer,
+body.app-on #tab-dm #dmComposer{flex:none;margin-top:10px}
+body.app-on #tab-dm > .hint{flex:none}
+/* пилюля «вниз» — над композером */
+.jumppill{
+  position:absolute;bottom:92px;right:22px;z-index:5;
+  padding:7px 12px;font-size:12px;border-radius:var(--radius-pill);
+  box-shadow:var(--shadow);font-weight:600;letter-spacing:-.005em;
+}
+
+/* ── Социальный рейл: люди (rail.js рисует в .tabs) ── */
+.rail-people{
+  flex:1 1 auto;min-height:0;
+  display:flex;flex-direction:column;gap:2px;
+}
+.rail-plabel{
+  font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dim-2);text-align:center;padding:4px 0 5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rail-list{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;gap:5px;align-items:center;
+  overflow-y:auto;padding:2px 1px;
+  scrollbar-width:thin;
+}
+.rail-list::-webkit-scrollbar{width:5px}
+.rail-list::-webkit-scrollbar-thumb{background:var(--scroll-thumb);
+  border-radius:3px}
+.rail-empty{
+  font-size:9px;color:var(--dim-2);text-align:center;
+  padding:6px 2px;line-height:1.5;
+}
+/* аватар друга: плитка 42px + точка presence; клик — личка */
+.railava{
+  position:relative;width:42px;height:42px;flex:none;
+  background:transparent;border:none;padding:0;cursor:pointer;
+  border-radius:12px;
+  transition:transform var(--dur-fast) var(--ease);
+}
+.railava:hover{transform:translateY(-1.5px) scale(1.06)}
+.railava:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.railava-face{
+  width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:13px;font-weight:700;letter-spacing:-.02em;
+  border:1px solid rgba(255,255,255,.16);
+  background-size:cover;background-position:center;
+  user-select:none;
+}
+.railava:not(.on) .railava-face{opacity:.38;filter:saturate(.6)}
+.railava-dot{
+  position:absolute;right:-3px;bottom:-3px;
+  width:12px;height:12px;border-radius:50%;
+  background:var(--dim-2);
+  border:2.5px solid var(--surface);
+  transition:background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+.railava.on .railava-dot{
+  background:var(--ok);
+  box-shadow:0 0 0 3px rgba(74,222,128,.18);
+  animation:dotIn .3s var(--ease-out);
+}
+@keyframes dotIn{from{transform:scale(.3)}to{transform:scale(1)}}
+/* док: свой аватар внизу рейла */
+.rail-dock{
+  flex:none;margin-top:8px;padding-top:9px;
+  border-top:1px solid var(--border);
+  display:flex;justify-content:center;
+}
+.railme{
+  width:42px;height:42px;flex:none;
+  background:transparent;border:none;padding:0;cursor:pointer;
+  border-radius:12px;
+  transition:transform var(--dur-fast) var(--ease);
+}
+.railme:hover{transform:translateY(-1px)}
+.railme-face{
+  width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:13px;font-weight:700;letter-spacing:-.02em;
+  border:1px solid var(--accent-border);
+  background-size:cover;background-position:center;
+  transition:box-shadow var(--dur-fast) var(--ease);
+}
+.railme:hover .railme-face{box-shadow:0 0 0 2px var(--accent)}
+.railme:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Модалки (modal.js): confirm/prompt в теме приложения ── */
+.frmodal-wrap{
+  position:fixed;inset:0;z-index:270;
+  display:flex;align-items:flex-start;justify-content:center;
+  padding:14vh 16px 16px;
+  background:rgba(5,6,10,.55);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  opacity:0;transition:opacity .13s var(--ease);
+}
+.frmodal-wrap.show{opacity:1}
+.frmodal-wrap.closing{opacity:0}
+.frmodal{
+  width:min(440px,100%);
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-pop);
+  padding:18px 20px 16px;
+  transform:translateY(8px) scale(.97);
+  transition:transform .16s var(--ease-out);
+}
+.frmodal-wrap.show .frmodal{transform:none}
+.frmodal-tt{
+  font-size:14.5px;font-weight:700;letter-spacing:-.015em;
+  color:var(--text-strong);margin-bottom:8px;
+}
+.frmodal-body{color:var(--dim);font-size:12.5px;line-height:1.55;margin-bottom:10px}
+.frmodal-field{
+  width:100%;background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:9px 12px;color:var(--text);
+  font:inherit;font-size:13px;outline:none;
+  transition:border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+.frmodal-field:focus{border-color:var(--accent);box-shadow:var(--glow)}
+textarea.frmodal-field{
+  resize:vertical;min-height:96px;
+  font-family:var(--font-mono);font-size:11.5px;line-height:1.55;
+}
+.frmodal-row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.frmodal-row .sec{padding:8px 14px;font-size:12.5px}
+.frmodal-ok{
+  background:var(--accent);border:1px solid var(--accent);color:#fff;
+  border-radius:var(--radius-sm);padding:8px 16px;cursor:pointer;
+  font-weight:600;font-size:12.5px;
+}
+.frmodal-ok:hover{background:var(--accent2);border-color:var(--accent2)}
+.frmodal.danger .frmodal-ok{
+  background:var(--err);border-color:var(--err);
+}
+.frmodal.danger .frmodal-ok:hover{filter:brightness(1.08)}
+
+/* ── Command palette (palette.js) — Ctrl+K ── */
+.frpal-wrap{
+  position:fixed;inset:0;z-index:280;
+  background:rgba(5,6,10,.5);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  display:flex;align-items:flex-start;justify-content:center;
+  padding:11vh 16px 16px;
+  opacity:0;transition:opacity .14s var(--ease);
+}
+.frpal-wrap.show{opacity:1}
+.frpal{
+  width:min(560px,100%);
+  max-height:min(440px,66vh);
+  display:flex;flex-direction:column;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-pop);
+  overflow:hidden;
+  transform:translateY(8px) scale(.985);
+  transition:transform .16s var(--ease-out);
+}
+.frpal-wrap.show .frpal{transform:none}
+.frpal-in{
+  display:flex;align-items:center;gap:10px;
+  padding:13px 16px;border-bottom:1px solid var(--border);
+  flex:none;
+}
+.frpal-in .ico{font-size:17px;color:var(--dim);flex:none}
+.frpal-in input{
+  flex:1;background:transparent;border:none;outline:none;
+  font-size:14.5px;color:var(--text);padding:0;
+  box-shadow:none!important;
+}
+.frpal-in input:focus{border:none}
+.frpal-list{flex:1;min-height:0;overflow-y:auto;padding:6px}
+.frpal-list::-webkit-scrollbar{width:8px}
+.frpal-list::-webkit-scrollbar-thumb{background:var(--scroll-thumb);
+  border-radius:4px}
+.frpal-sec{
+  padding:9px 10px 4px;
+  font-size:9px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--dim-2);
+}
+.frpal-item{
+  display:flex;align-items:center;gap:10px;width:100%;
+  background:transparent;border:none;cursor:pointer;
+  border-radius:9px;padding:8px 10px;
+  color:var(--text);font-size:13px;text-align:left;
+  box-shadow:none;font-weight:500;
+  transition:background var(--dur-fast) var(--ease);
+}
+.frpal-item .ico{font-size:15px;color:var(--dim);flex:none}
+.frpal-item:hover{background:var(--hover-chip);transform:none;
+  border:none;color:var(--text)}
+.frpal-item.act{background:var(--accent-soft);color:var(--text-strong)}
+.frpal-item.act .ico{color:var(--accent)}
+.frpal-tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;letter-spacing:-.005em}
+.frpal-hint{
+  flex:none;font-size:10px;color:var(--dim-2);
+  font-family:var(--font-mono);letter-spacing:0;
+}
+.frpal-item.act .frpal-hint{color:var(--accent)}
+.frpal-empty{padding:20px 12px;text-align:center;color:var(--dim-2);font-size:12px}
+.frpal-foot{
+  display:flex;gap:16px;padding:9px 16px;flex:none;
+  border-top:1px solid var(--border);
+  font-size:10px;color:var(--dim-2);letter-spacing:.02em;
+}
+.frpal-foot span::before{content:"— ";opacity:.5}
+
+/* заглушка иконки (frIcon без спрайта — icons.js не загрузился) */
+.ico-fallback{display:inline-block;width:1em;text-align:center;
+  opacity:.35;font-size:.8em}
+
+/* ── Мобильная версия (≤860px): остров → нижняя панель ──
+   Рейл разворачивается в знакомую нижнюю навигацию (как у нативных
+   приложений): люди — горизонтальной лентой сверху панели, вкладки —
+   рядом, док прячем (профиль и так в вкладках). safe-area — для
+   iPhone с жестовой чертой. */
+@media (max-width:860px){
+  body.app-on main{padding:12px 12px 118px}   /* снизу — место под панель */
+  body.app-on header{padding-left:14px}      /* рейл внизу — шапка во всю ширину */
+  .tabs{
+    left:10px;right:10px;top:auto;bottom:10px;
+    width:auto;
+    flex-direction:column;gap:4px;
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));
+    border-radius:16px;
+  }
+  /* люди — горизонтальная лента над вкладками */
+  .rail-people{flex:none;max-height:54px}
+  .rail-plabel{display:none}
+  .rail-list{
+    flex-direction:row;flex-wrap:nowrap;
+    overflow-x:auto;overflow-y:hidden;
+    gap:7px;padding:1px 2px 3px;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .rail-list::-webkit-scrollbar{display:none}
+  .railava,.railava-face,.railme,.railme-face{width:36px;height:36px;border-radius:10px}
+  .railava-dot{width:10px;height:10px;right:-2px;bottom:-2px;border-width:2px}
+  /* вкладки — одной строкой, поровну */
+  .tabs-nav{flex-direction:row;gap:2px}
+  .tabs button{padding:6px 1px 5px;font-size:8.5px;border-radius:10px;flex:1}
+  .tabs button .ico{font-size:17px}
+  .tabs button.act{background:var(--accent-soft)}
+  .badge{top:1px;right:8px}
+  /* док не нужен: профиль — вкладка */
+  .rail-dock{display:none}
+  /* тосты — над панелью */
+  #toasts{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+  /* ЛС: подпись о приватности не съедает высоту композера */
+  body.app-on #tab-dm > .hint{
+    max-height:3.4em;overflow-y:auto;
+  }
+  /* палитра — ниже шапки, крупнее тач-зона */
+  .frpal-wrap{padding-top:14vh}
+  .frpal-item{padding:10px 12px}
+  .frpal-foot{display:none}
+  /* модалке меньше верхнего отступа на маленьких экранах */
+  .frmodal-wrap{padding-top:9vh}
+}
+
+/* очень узкие телефоны: подписи вкладок мельче, но читаемы */
+@media (max-width:380px){
+  .tabs button{font-size:8px;letter-spacing:.01em}
+  body.app-on main{padding-left:12px;padding-right:10px}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3.3.0 — вкладка «Музыка»: синхронный плеер (music.js)
+   Дизайн — по системе Studio: поверхность 1px-границы, радиусы 8/10,
+   один акцент, моно-иконки. Никаких градиентов и свечения.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── карточка «сейчас играет» ── */
+.music-now{
+  display:flex;gap:14px;align-items:flex-start;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px;
+}
+.music-cover{
+  width:64px;height:64px;flex:none;border-radius:var(--radius);
+  background:var(--surface3);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--dim);
+}
+.music-cover .ico{width:30px;height:30px}
+.music-cover.playing{color:var(--accent);border-color:var(--accent-border)}
+.music-cover.playing .ico{animation:musipulse 2.4s ease-in-out infinite}
+@keyframes musipulse{
+  0%,100%{transform:scale(1);opacity:.9}
+  50%{transform:scale(1.08);opacity:1}
+}
+.music-nowinfo{flex:1;min-width:0}
+.music-title{
+  font-weight:700;letter-spacing:-.01em;font-size:16px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.musicbar{
+  height:6px;border-radius:var(--radius-pill);cursor:pointer;
+  background:var(--surface3);border:1px solid var(--border);
+  margin-top:12px;position:relative;overflow:hidden;
+}
+.musicbar-fill{
+  position:absolute;inset:0;width:0%;
+  background:var(--accent);border-radius:var(--radius-pill);
+  transition:width .3s linear;
+}
+.musicbar:hover .musicbar-fill{background:var(--accent2)}
+.musictimes{display:flex;margin-top:5px;font-variant-numeric:tabular-nums}
+
+/* ── транспорт (prev/play/next/volume) ── */
+.music-ctl{display:flex;align-items:center;gap:8px;flex:none}
+.music-ctl button{width:40px;height:40px;display:inline-flex;
+  align-items:center;justify-content:center}
+.music-ctl button .ico{width:19px;height:19px}
+.music-ctl input[type=range]{width:110px;accent-color:var(--accent)}
+#btnMPlay{background:var(--accent);border-color:var(--accent-border);
+  color:#fff}
+#btnMPlay:hover{background:var(--accent2)}
+body[data-theme="snow"] #btnMPlay,
+body[data-theme="sakura"] #btnMPlay,
+body[data-theme="cherry-grove"] #btnMPlay,
+body[data-theme="creme-brulee"] #btnMPlay{color:#fff}
+
+.music-actions{display:flex;align-items:center;gap:10px;margin:10px 0 2px}
+
+/* ── оверлей «нажми, чтобы слушать» (autoplay policy) ── */
+.musicjoin{
+  margin:10px 0 0;padding:10px;display:flex;justify-content:center;
+  background:var(--accent-soft);border:1px solid var(--accent-border);
+  border-radius:var(--radius);
+}
+
+/* ── очередь ── */
+.musicqueue{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+
+/* ── общий вид строк (библиотека и очередь) ── */
+.mrow,.mqrow{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 10px;border-radius:var(--radius);
+  border:1px solid transparent;
+}
+.mrow:hover{background:var(--hover-chip)}
+.mrow.cur{background:var(--accent-soft);border-color:var(--accent-border)}
+.mqrow{background:var(--surface);border:1px solid var(--border)}
+.mrow-main{flex:1;min-width:0;cursor:pointer}
+.mqrow .mrow-main{cursor:default}
+.mrow-title{font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.mrow.cur .mrow-title{color:var(--accent)}
+.mrow-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mq-idx{width:22px;text-align:right;color:var(--dim-2);
+  font-variant-numeric:tabular-nums;flex:none}
+.mq-by{flex:none;max-width:30%;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.mrow button,.mqrow button{width:34px;height:34px;flex:none;
+  display:inline-flex;align-items:center;justify-content:center}
+.mrow button .ico,.mqrow button .ico{width:16px;height:16px}
+
+.musiclist{display:flex;flex-direction:column;gap:2px;max-height:46vh;
+  overflow-y:auto;padding-right:4px}
+
+/* ── внешние API (поиск/импорт) ── */
+.music-api-head{padding:2px 10px 6px}
+.mrow.api .mrow-main{cursor:default}
+
+@media (max-width:640px){
+  .music-now{flex-wrap:wrap}
+  .music-cover{width:48px;height:48px}
+  .music-ctl{width:100%;justify-content:center}
+  .music-ctl input[type=range]{flex:1;width:auto}
+  .musiclist{max-height:40vh}
+}
+
+/* ═══════════════ v3.6.0: демонстрация экрана (screen.js) ═══════════════
+   Панель живёт и в классике (вкладка), и в скинах «Ночник»/«Крем-брюле»
+   (карточка «Сейчас», узкая колонка) — поэтому всё на width:100%,
+   без фиксированных ширин, у видео честный aspect-ratio и свои капы
+   высоты (урок v3.5.12: содержимое карточки не должно съедать колонку). */
+.screenhost{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.screenhost .screenvideo{flex:1 1 260px;min-width:0}
+.screenhost-ctl{flex:1 1 200px;min-width:180px;display:flex;
+  flex-direction:column;gap:8px}
+.screenvideo{width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;
+  border:1px solid var(--border);display:block;object-fit:contain;
+  max-height:min(60vh,540px)}
+.screenframe{position:relative}
+.screenidle{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:var(--dim-2);font-size:14px;pointer-events:none}
+.screenstreams{display:flex;flex-direction:column;gap:8px}
+.screenrow{display:flex;align-items:center;gap:10px;padding:8px 10px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px}
+.screenrow-name{font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.screenrow-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screenrow .spk-dot{width:9px;height:9px;border-radius:50%;flex:none;
+  background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+  animation:screenpulse 1.6s ease-in-out infinite}
+@keyframes screenpulse{0%,100%{opacity:1}50%{opacity:.35}}
+.screenview-bar{align-items:center}
+.screenview-bar input[type=range]{flex:none}
+@media (max-width:640px){
+  .screenvideo{max-height:42vh}
+  .screenview-bar{flex-wrap:wrap}
+}

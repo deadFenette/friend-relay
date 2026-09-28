@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Friend Relay</title>
+<link rel="stylesheet" href="/static/style.css">
+<!-- v3.5.9: скины «Ночник» и «Крем-брюле» (вторая парадигма целиком) —
+     все правила под html[data-skin="nochnik"|"creme"], без атрибута
+     файл не применяется: классика остаётся прежней -->
+<link rel="stylesheet" href="/static/nochnik.css">
+</head>
+<body>
+<header>
+  <!-- Группа 1: бренд -->
+  <div class="h-brand">
+    <span class="brandlogo" data-i="relay"></span>
+    <b>Friend Relay <span class="hint">веб</span></b>
+  </div>
+  <!-- Группа 2: статус подключения и онлайн -->
+  <div class="h-status">
+    <span class="connpill"><span class="dot" id="connDot"></span><span id="connTxt">не подключено</span></span>
+    <span id="online"></span>
+  </div>
+  <!-- Группа 3: инструменты (хост · палитра · разделитель · тема · UX-студия) -->
+  <div class="h-tools">
+    <span class="hint" id="hostInfo"></span>
+    <!-- v3.2: command palette — Ctrl+K, любой раздел за секунду (palette.js) -->
+    <button id="btnPalette" class="sec" title="Быстрый переход (Ctrl+K)" data-i="search"></button>
+    <span class="h-divider"></span>
+    <button id="btnTheme" class="sec" title="Сменить тему оформления" data-i="theme"></button>
+    <!-- v2.0.8: Appearance Studio — плагины оформления (appearance.js) -->
+    <button id="btnUx" class="sec" title="Оформление и плагины" data-i="palette"></button>
+  </div>
+</header>
+<main>
+  <div class="panel" id="connectPanel">
+    <div class="brandhero">
+      <div class="logo" data-i="relay"></div>
+      <h1>Friend Relay</h1>
+      <p>Твой приватный чат с друзьями — без серверов-посредников</p>
+    </div>
+    <div class="conn-grid">
+      <label class="field">
+        <span>Твоё имя</span>
+        <input id="name" placeholder="Как тебя видеть друзья" style="width:100%" maxlength="32">
+      </label>
+      <label class="field">
+        <span>Ключ доступа <em class="opt">— если хост его включил</em></span>
+        <input id="key" type="password" placeholder="Необязательно" style="width:100%">
+      </label>
+      <label class="field">
+        <span>Ключ шифрования <em class="opt">— для секретных сообщений</em></span>
+        <input id="enckey" type="password" placeholder="Необязательно" style="width:100%">
+      </label>
+      <!-- (v3.5.1) Ключ админа: с именем хоста даёт права админа с любого
+           устройства. С машины хоста не нужен (loopback и так админ). -->
+      <label class="field">
+        <span>Ключ админа <em class="opt">— только для хоста: введи ИМЯ ХОСТА + этот ключ</em></span>
+        <input id="adminkey" type="password" placeholder="Необязательно" style="width:100%">
+      </label>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="btnConnect" style="min-width:170px" data-i="rocket"> Подключиться</button>
+      <label class="chk"><input type="checkbox" id="showKeys"> Показать ключи</label>
+    </div>
+    <div class="warn" id="connWarn"></div>
+    <details class="howto">
+      <summary>Как подключиться? Подсказка</summary>
+      <div class="hint">Хост берётся из адреса этой страницы — открывай её на хосте:
+        http://IP-хоста:8420/ (ZeroTier: http://100.x.x.x:8420/). Ключ шифрования —
+        тот же «секретный ключ», что в настройках приложения хоста: без него
+        зашифрованные сообщения не прочитать. Первый вывод ключа может занять
+        несколько секунд — дальше берётся из кеша вкладки. Ключ админа —
+        для ВЛАДЕЛЬЦА сервера: введи имя хоста и ключ (его печатает сервер при
+        старте / показывает GUI хоста) — станешь админом и из браузера.
+        С самой машины хоста админство включается само, ключ не нужен.</div>
+    </details>
+  </div>
+
+  <div id="app" class="hidden">
+    <!-- v3.2 «Studio Social»: табы превращаются CSS в социальный
+         рейл-остров (rail.js добавляет сюда же аватары друзей и док).
+         Разметка вкладок не менялась — только роли для ARIA. -->
+    <div class="tabs" role="tablist" aria-label="Разделы">
+      <div class="tabs-nav">
+        <button data-tab="chat" class="act" role="tab" aria-selected="true" data-i="chat"> Чат</button>
+        <button data-tab="dm" role="tab" aria-selected="false" data-i="dm"> ЛС</button>
+        <button data-tab="files" role="tab" aria-selected="false" data-i="files"> Файлы</button>
+        <button data-tab="profile" role="tab" aria-selected="false" data-i="profile"> Профиль</button>
+        <!-- v3 Studio: Шахматы переехали в Игры (это же игра) — отдельной
+             вкладки больше нет, но #tab-chess остаётся как подвид Games.
+             См. карту «Шахматы» в #tab-games. -->
+        <!-- v2.0.5: вкладка игр — лаунчер (как «активити» в Discord) -->
+        <button data-tab="games" role="tab" aria-selected="false" data-i="games"> Игры</button>
+        <!-- v3.3.0: вкладка музыки — синхронный плеер (music.js) -->
+        <button data-tab="music" role="tab" aria-selected="false" data-i="music"> Музыка</button>
+        <button data-tab="voice" role="tab" aria-selected="false" data-i="voice"> Голос</button>
+        <!-- v3.6.0: демонстрация экрана со звуком (screen.js, WebRTC P2P) -->
+        <button data-tab="screen" role="tab" aria-selected="false" data-i="screen"> Экран</button>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-chat">
+      <div class="chatTop">
+        <select id="channelSel" style="max-width:230px">
+          <option value=""># общий чат</option>
+        </select>
+        <!-- v2.0.3: каналы прямо из веба — создать и удалить (сможет
+             только создатель канала, сервер проверит и ответит 403) -->
+        <button id="btnChanNew" class="sec" title="Создать канал" data-i="plus"></button>
+        <button id="btnChanDel" class="sec hidden" title="Удалить канал
+          (создатель)" data-i="trash"></button>
+        <span id="typing"></span>
+        <span style="flex:1"></span>
+        <!-- v2.0.3: панель закреплённых сообщений (GET /pinned) -->
+        <button id="btnPins" class="sec" title="Закреплённые сообщения" data-i="pin"></button>
+        <!-- v2.0.2: поиск по загруженной ленте + звук-уведомление -->
+        <input id="searchBox" placeholder="Поиск по чату…">
+        <span class="hint" id="searchStat"></span>
+        <button id="btnNotify" class="sec" title="Звук новых сообщений,
+          когда вкладка не активна" data-i="bell"></button>
+      </div>
+      <!-- v2.0.3: выпадающая панель пинов (видна после клика на 📌) -->
+      <div id="pinPanel" class="pinpanel hidden">
+        <div class="pinpanel-head">Закреплённые сообщения
+          <button id="btnPinClose" class="sec" data-i="x"></button></div>
+        <div id="pinList"></div>
+      </div>
+      <div id="feed"></div>
+      <div id="composer">
+        <button id="btnEmoji" title="Эмодзи" type="button" data-i="emoji"></button>
+        <input id="msgText" placeholder="Напиши сообщение…" maxlength="4000">
+        <button id="btnSend" title="Отправить (Enter)" data-i="send"></button>
+      </div>
+      <div class="warn" id="chatWarn"></div>
+      <button id="jumpDown" class="jumppill hidden">вниз <span id="jumpCnt"></span></button>
+    </div>
+
+    <div class="panel hidden" id="tab-dm">
+    <div class="chatTop">
+      <select id="dmPeer"><option value="">— выбери, кому писать —</option></select>
+      <span class="hint" id="dmStat"></span>
+    </div>
+    <div id="dmFeed"></div>
+    <div id="dmComposer">
+      <!-- v2.0.3: файлы в ЛС — POST /send_dm_file, скачивание
+           /dm_download/<id> (видит только отправитель и получатель) -->
+      <label class="filebtn dmbtn" title="Прикрепить файл (только для
+        собеседника)" data-i="attach"><input type="file" id="dmFileInput"></label>
+      <input id="dmText" placeholder="Личное сообщение…" maxlength="4000">
+      <button id="btnDmSend" title="Отправить (Enter)" data-i="send"></button>
+    </div>
+    <div class="warn" id="dmWarn"></div>
+    <div class="hint" style="margin-top:8px">Личные сообщения видны только тебе
+      и собеседнику — хост их не показывает в общем чате. Список собеседников —
+      друзья из профиля и существующие диалоги (можно открыть ЛС кликом по
+      другу во вкладке «Профиль»). Зашифрованные сообщения шифруются тем же
+      ключом, что и общий чат.</div>
+  </div>
+
+  <div class="panel hidden" id="tab-files">
+      <div class="row" style="margin-bottom:10px">
+        <button id="btnRefreshFiles" class="sec" data-i="refresh"> Обновить</button>
+        <label class="filebtn sec" data-i="attach"> Прикрепить файл<input type="file" id="fileInput"></label>
+        <span class="hint" id="upStat"></span>
+      </div>
+      <div id="filesList"></div>
+    </div>
+
+    <div class="panel hidden" id="tab-profile">
+      <div id="profCard" class="profcards">
+        <div class="profhead">
+          <div id="profAvatar" class="bigavatar">…</div>
+          <div class="profhead-info">
+            <div id="profName" class="profName">—</div>
+            <div id="profLogin" class="hint"></div>
+            <div id="profStatusMsg" class="profStatus"></div>
+          </div>
+        </div>
+        <div class="profrow">
+          <label class="field"><span>Отображаемое имя <em class="opt">— как видят друзья</em></span>
+            <input id="profNameInput" maxlength="32" placeholder="Как в приложении"></label>
+          <label class="field"><span>Статус <em class="opt" id="profStatusCnt">0/128</em></span>
+            <input id="profStatusInput" maxlength="128" placeholder="Напр. «В игре»"></label>
+        </div>
+        <label class="field"><span>О себе <em class="opt" id="profBioCnt">0/2000</em></span>
+          <textarea id="profBioInput" rows="3" maxlength="2000"
+            placeholder="Расскажи о себе: любимые игры, хобби, что угодно…"></textarea></label>
+        <div class="row" style="margin-top:10px">
+          <button id="btnSaveProfile" data-i="save"> Сохранить</button>
+          <label class="filebtn sec" data-i="image"> Сменить аватар<input type="file" id="avatarInput" accept="image/png"></label>
+          <button id="btnRemoveAvatar" class="sec" data-i="trash"> Убрать аватар</button>
+          <span class="hint" id="profSaveStat"></span>
+        </div>
+        <div class="warn" id="profWarn"></div>
+        <div class="hint">Аватар — PNG до 2 МБ (квадрат обрежется сам). Смена
+          имени/статуса видна друзьям сразу после сохранения.</div>
+      </div>
+
+      <div class="subhead">Друзья</div>
+      <div id="friendsBox" class="friendslist"></div>
+      <div class="row" style="margin-top:10px">
+        <input id="friendName" placeholder="Имя друга (логин)" style="max-width:230px">
+        <button id="btnAddFriend" class="sec" data-i="plus"> Добавить</button>
+      </div>
+      <div class="warn" id="friendsWarn"></div>
+
+      <div class="subhead">Данные аккаунта</div>
+      <table id="profileTable"></table>
+
+      <!-- v2.0.3: сводка хоста (GET /server/stats) — «жив ли сервер» -->
+      <div class="subhead">Хост
+        <button id="btnHostStats" class="sec" data-i="refresh"> Обновить</button></div>
+      <table id="hostTable"><tr><td colspan="2" class="hint">Нажми
+        «Обновить», чтобы спросить сервер о себе.</td></tr></table>
+    </div>
+
+    <!-- v3 Studio: Шахматы — теперь подвид вкладки «Игры».
+         #tab-chess остаётся отдельным .panel со всеми ID, на которые
+         опирается chess.js (btnChessHost, board, moveList, lbBox…).
+         Скрыт по умолчанию; открывается кликом по карте «Шахматы» в
+         #tab-games. Кнопка «← к играм» возвращает в лаунчер. -->
+    <div class="panel hidden" id="tab-chess">
+      <!-- Кнопка возврата в лаунчер игр -->
+      <button class="chess-back" id="btnChessBack" data-i="arrow-left"> К играм</button>
+      <div class="row" style="margin-bottom:10px">
+        <button id="btnChessHost">Создать матч</button>
+        <input id="chessCode" placeholder="Код матча" style="width:150px;
+          text-transform:uppercase">
+        <button id="btnChessJoin" class="sec">Присоединиться</button>
+        <span style="flex:1"></span>
+        <button id="btnChessResign" class="sec hidden" data-i="flag"> Сдаться</button>
+        <button id="btnChessLeave" class="sec hidden">Выйти</button>
+        <button id="btnChessRefresh" class="sec" data-i="refresh"> Обновить</button>
+      </div>
+      <div id="chessStatus" class="hint" style="margin-bottom:10px">Нет активного матча.
+        Создай матч и передай код другу — он откроет эту же страницу
+        (или запустит приложение) и нажмёт «Присоединиться».</div>
+      <div id="chessWrap">
+        <div id="board"></div>
+        <div id="movesBox">
+          <div class="hint" id="chessPlayers"></div>
+          <div id="moveList" style="margin-top:6px"></div>
+          <div class="hint" style="margin-top:8px">Клик по своей фигуре → клик по
+            полю. Подсказки ходов — черновые, судья — сервер: неверный ход он
+            отклонит. Превращение пешки — всегда в ферзя.</div>
+        </div>
+      </div>
+      <!-- v2.0.3: таблица лидеров ChessBot (GET /leaderboard) -->
+      <div class="subhead" data-i="trophy"> Рейтинг игроков
+        <button id="btnLbRefresh" class="sec" data-i="refresh"></button></div>
+      <div id="lbBox" class="hint">Загружаю рейтинг…</div>
+      <div class="warn" id="chessWarn"></div>
+    </div>
+
+    <!-- v2.0.5: вкладка «Игры» — лаунчер + окно игры в iframe.
+         v3 Studio: + секция «избранных» игр (встроенные — шахматы).
+         gameWin — оверлей на весь экран (как окно активити в Discord);
+         iframe песочнице allow-scripts+allow-same-origin (рекорды в
+         localStorage), всё остальное отрезано. -->
+    <div class="panel hidden" id="tab-games">
+      <div class="hint" style="margin-bottom:14px">Мини-игры прямо в
+        браузере — хост их раздаёт сам, ничего ставить не нужно.
+        Одиночные игры работают локально; мультиплеерные судьит сервер.</div>
+
+      <!-- Избранные встроенные игры -->
+      <div class="games-section-title" data-i="star"> Избранное</div>
+      <div class="games-featured" id="gamesFeatured">
+        <!-- Chess — встроенная мультиплеерная игра (chess.js).
+             Карта открывает #tab-chess как подвид (см. games.js). -->
+        <div class="gamecard featured" id="chessCard" data-game="chess">
+          <div class="gameicon" data-i="chess-knight"></div>
+          <div class="gametitle">Шахматы</div>
+          <div class="gamedesc">Партия 1-на-1 с другом или ботом.
+            Судья — сервер: код матча, рейтинг ELO, история ходов.</div>
+          <div class="gamemode">мультиплеер · встроенная</div>
+        </div>
+      </div>
+
+      <!-- Серверные игры (раздаёт хост: 2048, Сапёр, Го, Воксель…) -->
+      <div class="games-section-title" data-i="game-grid"> Серверные игры</div>
+      <div id="gamesGrid" class="gamesgrid"></div>
+    </div>
+
+    <!-- v3.3.0: вкладка «Музыка» — синхронный плеер (music.js).
+         Хост кладёт треки в relay_data/music (или задаёт папку через
+         настройки), все слушают синхронно, любой может выбрать трек.
+         Управление (play/pause/перемотка) — зависит от open_dj хоста;
+         очередь открыта всем всегда. -->
+    <div class="panel hidden" id="tab-music">
+      <div class="music-now">
+        <div class="music-cover" id="musicCover" data-i="music"></div>
+        <div class="music-nowinfo">
+          <div class="music-title" id="musicTitle">Ничего не играет</div>
+          <div class="hint" id="musicSub">Выбери трек из библиотеки — он зазвучит у всех</div>
+          <div class="musicbar" id="musicBar" title="Перемотка (клик)">
+            <div class="musicbar-fill" id="musicBarFill"></div>
+          </div>
+          <div class="musictimes hint">
+            <span id="musicPos">0:00</span>
+            <span style="flex:1"></span>
+            <span id="musicDur">–:––</span>
+          </div>
+        </div>
+        <div class="music-ctl">
+          <button id="btnMPrev" class="sec" title="Предыдущий трек" data-i="skip-back"></button>
+          <button id="btnMPlay" title="Играть / пауза" data-i="play"></button>
+          <button id="btnMNext" class="sec" title="Следующий трек" data-i="skip-fwd"></button>
+          <input type="range" id="musicVol" min="0" max="100" value="70"
+                 title="Твоя громкость (слышна только тебе)">
+          <span class="hint" id="musicVolVal">70%</span>
+        </div>
+      </div>
+      <div class="music-actions">
+        <button id="btnMRescan" class="sec" data-i="refresh"> Обновить библиотеку</button>
+        <span class="hint" id="musicStat"></span>
+      </div>
+      <!-- Оверлей «нажми, чтобы слушать»: браузеры блокируют автоплей
+           до первого клика на странице — честно просим жест -->
+      <div id="musicJoin" class="musicjoin hidden">
+        <button id="btnMJoin" data-i="headphones"> Слушать с всеми</button>
+      </div>
+
+      <div class="subhead">Очередь</div>
+      <div id="musicQueue" class="musicqueue"></div>
+
+      <div class="subhead">Библиотека</div>
+      <div class="row" style="margin-bottom:8px">
+        <input id="musicSearch" placeholder="Фильтр по библиотеке… (Enter — искать ещё и во внешних API)">
+        <span class="hint" id="musicCnt"></span>
+      </div>
+      <div id="musicApiBox" class="hidden"></div>
+      <div id="musicList" class="musiclist"></div>
+      <div class="hint" style="margin-top:10px">Хост раскладывает треки (mp3/flac/ogg/wav/m4a)
+        в папку <b>relay_data/music</b> на своём компьютере — они сразу появляются
+        здесь. Громкость ползунка — только твоя. Порядок в очереди общий для всех.</div>
+    </div>
+
+    <div class="panel hidden" id="tab-voice">
+      <div class="row" style="margin-bottom:10px">
+        <button id="btnVoice" data-i="voice"> Подключиться</button>
+        <button id="btnVoiceMute" class="sec hidden" data-i="mic-off"> Микрофон: вкл</button>
+        <span style="flex:1"></span>
+        <span class="hint" id="voiceStat"></span>
+      </div>
+      <div class="warn" id="voiceWarn"></div>
+
+      <div class="subhead">Устройства и звук</div>
+      <div class="voiceset">
+        <label class="field"><span>Микрофон</span>
+          <select id="micSel"><option value="">По умолчанию</option></select></label>
+        <label class="field"><span>Наушники / динамик</span>
+          <select id="spkSel"><option value="">По умолчанию</option></select></label>
+        <label class="field"><span>Громкость собеседников <em class="opt" id="volVal">100%</em></span>
+          <input type="range" id="volSlider" min="0" max="200" value="100"></label>
+        <label class="field"><span>Обработка звука браузером</span>
+          <span class="chk"><input type="checkbox" id="dspCheck" checked>
+            шумодав · эхоподавление · автогромкость</span></label>
+        <div class="field">
+          <span>Уровень микрофона</span>
+          <div class="meter"><div id="micMeter"></div></div>
+          <span class="hint">Скажи что-нибудь после подключения — полоска должна дёрнуться</span>
+        </div>
+      </div>
+
+      <div class="subhead">Проверка микрофона</div>
+      <div class="row" style="margin-bottom:4px">
+        <button id="btnMicTest" class="sec" data-i="voice"> Проверить микрофон</button>
+        <span class="hint" id="micTestStat">Запись 5 секунд прямо в браузере —
+          на сервер ничего не уходит. Потом послушай себя.</span>
+      </div>
+      <div id="micTestBox" class="hidden">
+        <audio id="micTestAudio" controls></audio>
+        <div class="hint" id="micTestVerdict"></div>
+      </div>
+      <div class="hint" style="margin-top:6px">Слушай в наушниках — из динамиков
+            запись пойдёт обратно в микрофон (эхо). Проверка использует
+            выбранный выше микрофон; работает только по https, как и голос.</div>
+
+      <div class="subhead">В канале</div>
+      <div id="voicePeople"></div>
+      <div class="hint">Голос живёт по тому же адресу, что и чат — открой
+        <b id="voiceHttpsHint"></b> — при первом заходе браузер покажет
+        предупреждение про сертификат: «Дополнительно» → «Перейти на сайт»
+        (сертификат самоподписанный, это ожидаемо). Микрофон браузеры
+        отдают только на https — это ограничение всех браузеров, не баг.
+        Микширование делает хост (тот же голосовой сервер, что и в
+        приложении): говорите в наушниках, чтобы не было эха.</div>
+    </div>
+
+    <!-- v3.6.0: вкладка «Экран» — демонстрация экрана со звуком (screen.js).
+         Медиа идёт через WebRTC P2P: ведущий захватывает экран браузером
+         (getDisplayMedia, системный звук — Chrome/Edge на Windows), сервер
+         релеит только служебный сигналинг. В скинах «Ночник»/«Крем-брюле»
+         панель переезжает в карточку «Сейчас» (AMBIENT, см. nochnik.js). -->
+    <div class="panel hidden" id="tab-screen">
+      <div class="row" style="margin-bottom:10px">
+        <button id="btnScreenShare" data-i="screen"> Показать свой экран</button>
+        <button id="btnScreenStop" class="sec hidden" data-i="stop"> Закончить показ</button>
+        <span style="flex:1"></span>
+        <span class="hint" id="screenStat"></span>
+      </div>
+      <div class="warn" id="screenWarn"></div>
+
+      <!-- У ведущего: превью + настройки -->
+      <div id="screenHost" class="hidden">
+        <div class="subhead">Мой показ</div>
+        <div class="screenhost">
+          <video id="screenPreview" class="screenvideo" autoplay playsinline muted></video>
+          <div class="screenhost-ctl">
+            <label class="field"><span>Режим картинки</span>
+              <select id="screenQuality">
+                <option value="motion">Движение / игры — плавно</option>
+                <option value="detail">Чтение / код — резко</option>
+                <option value="max">Максимум — LAN / ZeroTier (60 кадров)</option>
+              </select></label>
+            <div class="field"><span>Смотрят сейчас</span>
+              <div id="screenWatchers" class="hint">— никто —</div></div>
+            <div class="hint">Громкость и «стоп» — у зрителя и в панели выше.
+              Превью без звука, чтобы не было эха.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- У зрителя: видео + полоска управления -->
+      <div id="screenView" class="hidden">
+        <div class="screenframe">
+          <video id="screenVideo" class="screenvideo" autoplay playsinline></video>
+          <div id="screenViewIdle" class="screenidle hidden">ждём картинку…</div>
+        </div>
+        <div class="row screenview-bar" style="margin-top:8px">
+          <span class="hint" id="screenViewWho"></span>
+          <span style="flex:1"></span>
+          <input type="range" id="screenVol" min="0" max="100" value="100"
+                 title="Громкость звука экрана" style="max-width:130px">
+          <button id="btnScreenFull" class="sec" title="На весь экран" data-i="external"></button>
+          <button id="btnScreenWatchStop" class="sec" data-i="x"> Перестать смотреть</button>
+        </div>
+      </div>
+
+      <div class="subhead">Сейчас показывают</div>
+      <div id="screenStreams" class="screenstreams"></div>
+
+      <div class="hint" style="margin-top:10px">Картинка и звук идут напрямую
+        от ведущего к зрителям (WebRTC P2P, без нагрузки на хост). Звук
+        экрана: в Chrome/Edge выбери «Весь экран» и поставь галочку
+        «Также передавать звук системы» — иначе придёт только картинка;
+        Firefox и Safari системный звук не умеют — тогда панель предложит
+        догрузить его через «Стерео микшер» или VB-Cable. Если показываешь
+        со звуком системы — надень наушники, иначе голосовой чат попадёт
+        в показ дважды. Слабая сеть не рвёт показ: качество снижается
+        само. Работает только по https, как и голос.</div>
+    </div>
+  </div>
+</main>
+<div id="toasts"></div>
+<!-- v2.0.8: Appearance Studio — панель оформления справа (как в Figma).
+     Управление — appearance.js: реестр плагинов рисует карточки сам.
+     Оверлей затемняет страницу и ловит клик «мимо»; Esc тоже закрывает. -->
+<div id="uxOverlay" class="ux-overlay hidden"></div>
+<aside id="uxDrawer" class="ux-drawer hidden" aria-label="Оформление">
+  <div class="ux-head">
+    <div class="ux-head-tt">
+      <b>Оформление</b>
+      <span class="hint">Плагины интерфейса — меняются сразу и сохраняются<br>в этом браузере (кнопка ⬇ переносит на другое устройство)</span>
+    </div>
+    <button id="btnUxClose" class="sec" title="Закрыть (Esc)" data-i="x"></button>
+  </div>
+  <div class="ux-io">
+    <button id="uxExport" class="sec" title="Скопировать настройки как JSON" data-i="copy"> Скопировать</button>
+    <button id="uxImport" class="sec" title="Применить настройки из JSON" data-i="download"> Вставить</button>
+  </div>
+  <div id="uxBody" class="ux-body"></div>
+  <div class="ux-foot">
+    <button id="uxPresetRich" class="sec" title="Аврора, стекло, мягкие баблы" data-i="sparkles"> Дорого</button>
+    <button id="uxPresetCalm" class="sec" title="Минимум эффектов" data-i="theme"> Спокойно</button>
+    <button id="uxPresetReset" class="sec" title="Как из коробки" data-i="refresh"> Сброс</button>
+  </div>
+</aside>
+<!-- v2.0.5: окно игры поверх интерфейса (открывается из лаунчера) -->
+<div id="gameWin" class="gamewin hidden">
+  <div class="gamewin-bar">
+    <b id="gameWinTitle">Игра</b>
+    <span style="flex:1"></span>
+    <button id="btnGameClose" class="sec" title="Закрыть игру (Esc)" data-i="x"></button>
+  </div>
+  <iframe id="gameFrame" class="gamewin-frame" sandbox="allow-scripts allow-same-origin"
+    title="Окно игры"></iframe>
+</div>
+<script src="/static/forge.min.js"></script>
+<script src="/static/core.js"></script>
+<script src="/static/modal.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/files.js"></script>
+<script src="/static/profile.js"></script>
+<script src="/static/dm.js"></script>
+<script src="/static/chess.js"></script>
+<script src="/static/games.js"></script>
+<script src="/static/voice.js"></script>
+<script src="/static/music.js"></script>
+<!-- v3.6.0: демонстрация экрана (до appearance/nochnik — им нужен DOM панели) -->
+<script src="/static/screen.js"></script>
+<script src="/static/appearance.js"></script>
+<script src="/static/icons.js"></script>
+<script src="/static/rail.js"></script>
+<script src="/static/main.js"></script>
+<script src="/static/palette.js"></script>
+<!-- v3.5.9: скины «Ночник»/«Крем-брюле» — последним: нужны activateTab,
+     S, FRIENDS, openChannel, openDmWith, avatarColor, initialsOf,
+     setConn (все уже готовы) -->
+<script src="/static/nochnik.js"></script>
+</body>
+</html>

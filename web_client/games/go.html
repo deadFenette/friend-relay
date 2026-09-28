@@ -1,0 +1,774 @@
+<!doctype html>
+<!-- Го (v2.0.7) — веб-игра лаунчера «Игры» (аналог «активити» в Discord).
+     Самодостаточная страница для <iframe sandbox> веб-клиента; с хостом
+     общается только через postMessage (мини-SDK: fr_hello/fr_ctx, fr_toast,
+     fr_close, fr_api — v2.0.7). Правила: взятия групп, запрет самоубийства,
+     простое ко, пас (два паса = конец), подсчёт по площади (китайские
+     правила, коми 6.5). Режимы: против ИИ (эвристики: взятия/спасение из
+     атари/форма), hot-seat на двоих и СЕТЕВОЙ матч (v2.0.7): судья — GoBot
+     на сервере через /bot_command (host/join/move/state/resign/leave —
+     тот же протокол, что у шахматной вкладки и Qt-диалога Го). Рекорды
+     ИИ-режима — в localStorage (wr_go_*). -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1,
+      user-scalable=no">
+<title>Го — Friend Relay</title>
+<style>
+  :root{
+    --bg:#0e1016; --surface:#171a23; --surface2:#1f2330; --border:#2a2f3f;
+    --text:#eef0f6; --dim:#8b93a7; --accent:#6366f1; --err:#f87171;
+    --ok:#34d399; --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:10px; padding:14px; user-select:none;
+  }
+  h1{margin:0; font-size:26px; background:linear-gradient(135deg,#f5f5f4,#a8a29e);
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    justify-content:center;}
+  .bar b{font-variant-numeric:tabular-nums; min-width:70px; text-align:center;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:4px 10px; font-weight:600; font-size:14px;}
+  select, button, input{
+    background:var(--surface2); color:var(--text); border:1px solid var(--border);
+    border-radius:10px; padding:8px 14px; font-size:14px; cursor:pointer;
+  }
+  input{cursor:text; letter-spacing:1px;}
+  .hidden{display:none !important;}
+  button.prim{background:var(--accent); border:0; color:#fff; font-weight:700;}
+  #wrap{position:relative;}
+  canvas{
+    display:block; border-radius:var(--radius);
+    box-shadow:0 10px 40px rgba(0,0,0,.5);
+    cursor:pointer; touch-action:manipulation;
+  }
+  .hint{color:var(--dim); font-size:13px; text-align:center; max-width:560px;}
+  .hint kbd{background:var(--surface2); border:1px solid var(--border);
+    border-radius:6px; padding:0 6px; font-size:12px;}
+  /* модалка результата (два паса) */
+  #scoreWin{position:fixed; inset:0; background:rgba(10,12,18,.72);
+    display:flex; align-items:center; justify-content:center; z-index:10;}
+  #scoreWin.hidden{display:none;}
+  .scorecard{background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:22px 28px; text-align:center;
+    min-width:280px; box-shadow:0 20px 60px rgba(0,0,0,.6);}
+  .scorecard h2{margin:0 0 8px; font-size:22px;}
+  .scorecard .big{font-size:34px; font-weight:800; margin:8px 0;}
+  .scorecard table{margin:6px auto 12px; border-collapse:collapse; font-size:15px;}
+  .scorecard td{padding:3px 12px; font-variant-numeric:tabular-nums;}
+  .scorecard td:first-child{text-align:left; color:var(--dim);}
+  .scorecard td:last-child{text-align:right; font-weight:700;}
+  .win-black{color:#fff;} .win-white{color:#e2e8f0;}
+  .tag{display:inline-block; padding:2px 10px; border-radius:99px;
+    font-size:12px; font-weight:700; letter-spacing:.3px;}
+  .tag.b{background:#111318; color:#eef0f6; border:1px solid #3a3f4f;}
+  .tag.w{background:#eef0f6; color:#111318;}
+</style>
+</head>
+<body>
+  <h1>⚫ Го — игра в окружение</h1>
+
+  <div class="bar">
+    <select id="modeSel">
+      <option value="ai">🤖 Против ИИ (ты — чёрные)</option>
+      <option value="pvp">👥 Hot-seat (двое за экраном)</option>
+      <option value="net">🌐 Сеть (онлайн-матч)</option>
+    </select>
+    <select id="sizeSel">
+      <option value="9" selected>9×9</option>
+      <option value="13">13×13</option>
+      <option value="19">19×19</option>
+    </select>
+    <button id="btnNew" class="prim">↻ Новая игра</button>
+    <button id="btnPass">⏭ Пас</button>
+    <b id="turnInfo">—</b>
+  </div>
+
+  <div class="bar hidden" id="netBar">
+    <button id="btnHost" class="prim">📡 Создать матч</button>
+    <input id="netCode" placeholder="КОД" maxlength="8" size="7"
+           style="text-transform:uppercase;" autocomplete="off">
+    <button id="btnJoin">🚪 Войти</button>
+    <button id="btnResign" class="hidden">🏳 Сдаться</button>
+    <button id="btnLeaveNet" class="hidden">⏏ Покинуть</button>
+  </div>
+
+  <div class="hint hidden" id="netStatus"></div>
+
+  <div id="wrap"><canvas id="board" width="560" height="560"></canvas></div>
+
+  <div class="bar">
+    <b id="capInfo">взято: 0 : 0</b>
+    <b id="recInfo" title="Победы против ИИ — в этом браузере">🏆 0</b>
+  </div>
+
+  <div class="hint">
+    Кликай по пересечениям линий. Группа без свобод («дамэ») снимается с
+    доски. <kbd>Пас</kbd> дважды подряд — конец и подсчёт по площади
+    (камни + окружённые пункты, коми белым 6.5). Правило ко: не повторяй
+    предыдущую позицию.
+  </div>
+
+  <div id="scoreWin" class="hidden">
+    <div class="scorecard">
+      <h2>🏁 Подсчёт по площади</h2>
+      <div class="big" id="scoreWinner">—</div>
+      <table id="scoreTable">
+        <tr><td>Чёрные (камни + территория)</td><td id="scoreBlack">0</td></tr>
+        <tr><td>Белые (камни + территория)</td><td id="scoreWhite">0</td></tr>
+        <tr><td>Коми белым</td><td id="scoreKomi">6.5</td></tr>
+      </table>
+      <div class="hint" id="netScoreLine"></div>
+      <button id="btnAgain" class="prim">Играть ещё</button>
+    </div>
+  </div>
+
+<script>
+"use strict";
+/* ═══════════════ мини-SDK Friend Relay (как в Сапёре/2048) ═══════════════ */
+window.parent.postMessage({type:"fr_hello"}, "*");
+let FR_NAME = "";
+let FR_SEQ = 0;
+const FR_WAIT = new Map();   /* id → {resolve, reject, timer} */
+/* v3.1: pending_auto_join — код матча для автоприсоединения.
+   Приходит в fr_ctx как go_auto_join (от клика по ссылке-приглашению
+   friendrelay://go/join/CODE в чате). После готовности контекста
+   (имя игрока) — переключаемся в NET-режим и зовём netJoin(). */
+let FR_AUTO_JOIN = "";
+window.addEventListener("message", (ev) => {
+  const d = ev.data || {};
+  if (d.type === "fr_ctx" && d.name){
+    FR_NAME = String(d.name);
+    /* v3.1: если пришёл go_auto_join — стартуем онлайн-матч и джойним. */
+    if (d.go_auto_join && !FR_AUTO_JOIN){
+      FR_AUTO_JOIN = String(d.go_auto_join).toUpperCase();
+      /* даём DOM построиться (init() мог ещё не позваться) */
+      setTimeout(() => autoJoinFromInvite(FR_AUTO_JOIN), 250);
+    }
+  }
+  if (d.type === "fr_api_res" && FR_WAIT.has(d.id)){
+    const w = FR_WAIT.get(d.id);
+    FR_WAIT.delete(d.id);
+    clearTimeout(w.timer);
+    if (d.ok) w.resolve(d.json);
+    else w.reject(new Error(d.error || "ошибка сети"));
+  }
+});
+/* v3.1: автоматическое присоединение к матчу по приглашению.
+   1) переключаемся в сетевой режим через select#modeSel,
+   2) вставляем код в поле netCode,
+   3) зовём netJoin() — игра отправит /bot_command join через fr_api. */
+async function autoJoinFromInvite(code){
+  try {
+    /* режим сети: <select id="modeSel"> со значением "net" */
+    const sel = document.getElementById("modeSel");
+    if (sel){
+      sel.value = "net";
+      sel.dispatchEvent(new Event("change", {bubbles: true}));
+    }
+    /* вставляем код и джойним */
+    const codeInput = document.getElementById("netCode");
+    if (codeInput) codeInput.value = code;
+    if (typeof netJoin === "function") netJoin();
+  } catch(e){ /* что-то пошло не так — пользователь введёт код руками */ }
+}
+/* fr_api (v2.0.7): API-запрос ЧЕРЕЗ хоста — тот сам подписывает
+   X-Relay-Auth (core.js) и восстанавливает сессию; игра не знает ни
+   access_key, ни секретов. Ответ приходит как {type:"fr_api_res", id,…}. */
+function frApi(path, body){
+  return new Promise((resolve, reject) => {
+    const id = ++FR_SEQ;
+    const timer = setTimeout(() => {
+      FR_WAIT.delete(id); reject(new Error("таймаут запроса"));
+    }, 12000);
+    FR_WAIT.set(id, {resolve, reject, timer});
+    try {
+      window.parent.postMessage({type:"fr_api", id, method:"POST",
+                                 path, body: body || {}}, "*");
+    } catch(e){ clearTimeout(timer); FR_WAIT.delete(id); reject(e); }
+  });
+}
+function frToast(text){
+  try { window.parent.postMessage({type:"fr_toast", text:String(text).slice(0,120)}, "*"); }
+  catch(e){ /* iframe-родителя может не быть (прямой просмотр) — не важно */ }
+}
+function frClose(){
+  try { window.parent.postMessage({type:"fr_close"}, "*"); } catch(e){}
+}
+
+/* ═══════════════ движок Го (порт lib/games/go_engine.py) ═══════════════ */
+const EMPTY=0, BLACK=1, WHITE=2;
+const LETTERS = "ABCDEFGHJKLMNOPQRST";      // буква I пропускается (нотация Го)
+const KOMI = 6.5;
+
+let size = 9, board = [], captured = [0,0,0], koPoint = null;
+let passesInRow = 0, moveNumber = 0, lastMove = null, gameOver = false;
+let mode = "ai";
+
+/* сетевой матч (v2.0.7): судья — GoBot на сервере, локальный движок
+   работает только как «проигрыватель» истории ходов для отрисовки */
+const NET = {match: null, myColor: null, poll: null, busy: false};
+
+const idx = (x,y) => y*size + x;
+function neighbors(x,y){
+  const r = [];
+  if (x>0) r.push([x-1,y]);
+  if (x<size-1) r.push([x+1,y]);
+  if (y>0) r.push([x,y-1]);
+  if (y<size-1) r.push([x,y+1]);
+  return r;
+}
+/* группа камней одного цвета + её свободы (flood fill) */
+function groupOn(bd,x,y){
+  const color = bd[idx(x,y)], seen = new Set([idx(x,y)]), stones = [[x,y]], libs = new Set();
+  while (stones.length){
+    const [cx,cy] = stones.pop();
+    for (const [nx,ny] of neighbors(cx,cy)){
+      const v = bd[idx(nx,ny)], k = idx(nx,ny);
+      if (v === EMPTY) libs.add(k);
+      else if (v === color && !seen.has(k)){ seen.add(k); stones.push([nx,ny]); }
+    }
+  }
+  return {seen, libs};
+}
+/* примерка хода: возвращает список взятых вершин или бросает ошибку */
+function applyMove(x,y,color){
+  if (gameOver) throw new Error("партия завершена");
+  if (board[idx(x,y)] !== EMPTY) throw new Error("пункт занят");
+  if (koPoint && koPoint[0]===x && koPoint[1]===y)
+    throw new Error("ко: нельзя повторить позицию");
+  const bd = board.slice();
+  bd[idx(x,y)] = color;
+  const enemy = color===BLACK ? WHITE : BLACK;
+  const removed = [];
+  const done = new Set();
+  for (const [nx,ny] of neighbors(x,y)){
+    if (bd[idx(nx,ny)] !== enemy || done.has(idx(nx,ny))) continue;
+    const g = groupOn(bd,nx,ny);
+    if (g.libs.size === 0){
+      for (const k of g.seen){ bd[k] = EMPTY; removed.push(k); done.add(k); }
+    }
+  }
+  const mine = groupOn(bd,x,y);
+  if (mine.libs.size === 0 && removed.length === 0)
+    throw new Error("самоубийство запрещено");
+  /* простое ко: одиночный камень в одиночной свободе снял один камень */
+  let newKo = null;
+  if (removed.length === 1 && mine.seen.size === 1 && mine.libs.size === 1)
+    newKo = removed[0];
+  return {bd, removed, newKo};
+}
+function isLegal(x,y,color){ try{ applyMove(x,y,color); return true; } catch(e){ return false; } }
+function play(x,y,color){
+  const r = applyMove(x,y,color);
+  board = r.bd;
+  captured[color] += r.removed.length;
+  koPoint = r.newKo ? [Math.floor(r.newKo/size), r.newKo%size] : null;
+  passesInRow = 0; moveNumber++; lastMove = [x,y];
+  return r.removed.length;
+}
+function passTurn(){
+  if (gameOver) return;
+  passesInRow++; koPoint = null; moveNumber++; lastMove = null;
+  if (passesInRow >= 2) gameOver = true;
+}
+const toMove = () => moveNumber%2===0 ? BLACK : WHITE;
+
+/* подсчёт по площади: камни + пустые области с одноцветной границей */
+function areaScore(){
+  let black = 0, white = 0;
+  const visited = new Set();
+  for (let y=0; y<size; y++) for (let x=0; x<size; x++){
+    const v = board[idx(x,y)];
+    if (v === BLACK) { black++; continue; }
+    if (v === WHITE) { white++; continue; }
+    if (visited.has(idx(x,y))) continue;
+    const region = [], stack = [[x,y]];
+    visited.add(idx(x,y));
+    const borders = new Set();
+    while (stack.length){
+      const [cx,cy] = stack.pop(); region.push(idx(cx,cy));
+      for (const [nx,ny] of neighbors(cx,cy)){
+        const nv = board[idx(nx,ny)];
+        if (nv === EMPTY){ if (!visited.has(idx(nx,ny))){ visited.add(idx(nx,ny)); stack.push([nx,ny]); } }
+        else borders.add(nv);
+      }
+    }
+    if (borders.size === 1 && borders.has(BLACK)) black += region.length;
+    else if (borders.size === 1 && borders.has(WHITE)) white += region.length;
+  }
+  const wWith = white + KOMI;
+  return {black, white, komi:KOMI, whiteWithKomi:wWith,
+          winner: black>wWith ? "black" : wWith>black ? "white" : "draw",
+          margin: Math.abs(black-wWith)};
+}
+
+/* ═══════════════ ИИ (эвристики, порт GoAI) ═══════════════ */
+function aiChooseMove(color){
+  const enemy = color===BLACK ? WHITE : BLACK;
+  let best = -Infinity, cands = [];
+  for (let y=0; y<size; y++) for (let x=0; x<size; x++){
+    if (board[idx(x,y)] !== EMPTY || !isLegal(x,y,color)) continue;
+    let sc = aiRate(x,y,color,enemy);
+    if (sc > -Infinity) cands.push([sc,x,y]);
+  }
+  if (!cands.length) return null;
+  best = Math.max(...cands.map(c=>c[0]));
+  if (best <= 0 && moveNumber > size*size/2) return null;   /* всё плохо — пас */
+  const top = cands.filter(c => c[0] >= best - 1.5);
+  return top[Math.floor(Math.random()*top.length)].slice(1);
+}
+function atariNeighbors(bd,x,y,color){
+  const res = [];
+  for (const [nx,ny] of neighbors(x,y)){
+    if (bd[idx(nx,ny)] !== color) continue;
+    const g = groupOn(bd,nx,ny);
+    if (g.libs.size === 1) res.push(...g.seen);
+  }
+  return res;
+}
+function aiRate(x,y,color,enemy){
+  let r;
+  try { r = applyMove(x,y,color); } catch(e){ return -Infinity; }
+  const bd = r.bd;
+  let score = 0;
+  if (r.removed.length) score += 24 * r.removed.length;            /* взять */
+  const mine = groupOn(bd,x,y);
+  if (mine.libs.size <= 1) score -= r.removed.length ? 4 : 18;     /* самостав */
+  const myAtariBefore = atariNeighbors(board,x,y,color);           /* спастись */
+  if (myAtariBefore.length && mine.libs.size >= 2) score += 20 * myAtariBefore.length;
+  score += 6 * atariNeighbors(bd,x,y,enemy).length;                /* атари врагу */
+  const line = Math.min(x, y, size-1-x, size-1-y);                 /* форма */
+  score += [0,1,6,5,3][Math.min(line,4)];
+  if (size === 9) score += Math.max(0, 4 - (Math.abs(x-4)+Math.abs(y-4)));
+  return score + Math.random();                                    /* шум */
+}
+
+/* ═══════════════ отрисовка (canvas) ═══════════════ */
+const cv = document.getElementById("board"), cx2d = cv.getContext("2d");
+const WOOD = "#d9b06a", GRID = "#5a4426", COORD = "#6b5231";
+let hover = null;
+
+function fitCanvas(){
+  /* доска вписывается в окно (и в iframe): не больше 92% меньшей стороны */
+  const maxSide = Math.min(window.innerWidth*0.92, window.innerHeight*0.66, 640);
+  const side = Math.max(300, Math.round(maxSide/size)*size + 46);
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = cv.style.height = side + "px";
+  cv.width = cv.height = Math.round(side * dpr);
+  cx2d.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+window.addEventListener("resize", fitCanvas);
+
+function draw(){
+  const W = cv.clientWidth || parseInt(cv.style.width,10);
+  const cell = (W - 40) / (size - 1);
+  const o = 24;
+  cx2d.clearRect(0,0,W,W);
+  /* дерево */
+  const g = cx2d.createLinearGradient(0,0,W,W);
+  g.addColorStop(0,"#dcb56f"); g.addColorStop(1,"#cfa35c");
+  cx2d.fillStyle = g;
+  roundRect(2,2,W-4,W-4,14); cx2d.fill();
+  /* сетка */
+  cx2d.strokeStyle = GRID; cx2d.lineWidth = 1;
+  for (let i=0; i<size; i++){
+    line(o, o+i*cell, o+(size-1)*cell, o+i*cell);
+    line(o+i*cell, o, o+i*cell, o+(size-1)*cell);
+  }
+  cx2d.lineWidth = 2;
+  cx2d.strokeRect(o, o, cell*(size-1), cell*(size-1));
+  /* хоси */
+  const mid = (size-1)/2, edge = size===9 ? 2 : 3;
+  const stars = [[edge,edge],[size-1-edge,edge],[edge,size-1-edge],[size-1-edge,size-1-edge]];
+  if (size >= 13) stars.push([edge,mid],[mid,edge],[mid,size-1-edge],[size-1-edge,mid]);
+  stars.push([mid,mid]);
+  cx2d.fillStyle = GRID;
+  for (const [sx,sy] of stars){
+    cx2d.beginPath(); cx2d.arc(o+sx*cell, o+sy*cell, Math.max(2, cell*0.09), 0, 7); cx2d.fill();
+  }
+  /* координаты */
+  cx2d.fillStyle = COORD; cx2d.font = "11px system-ui"; cx2d.textAlign = "center";
+  for (let i=0; i<size; i++){
+    cx2d.fillText(LETTERS[i], o+i*cell, o-9);
+    cx2d.fillText(LETTERS[i], o+i*cell, o+(size-1)*cell+15);
+    cx2d.fillText(String(size-i), o-13, o+i*cell+4);
+    cx2d.fillText(String(size-i), o+(size-1)*cell+13, o+i*cell+4);
+  }
+  /* камни */
+  for (let y=0; y<size; y++) for (let x=0; x<size; x++){
+    const v = board[idx(x,y)];
+    if (v !== EMPTY) drawStone(o+x*cell, o+y*cell, cell*0.47, v===BLACK);
+  }
+  /* метка последнего хода */
+  if (lastMove){
+    cx2d.strokeStyle = "#e2574c"; cx2d.lineWidth = 2;
+    cx2d.beginPath();
+    cx2d.arc(o+lastMove[0]*cell, o+lastMove[1]*cell, cell*0.18, 0, 7);
+    cx2d.stroke();
+  }
+  /* призрак под курсором (в сети — только когда наш ход) */
+  if (hover && !gameOver && (mode !== "net" || netMyTurn()) &&
+      isLegal(hover[0],hover[1],toMove()) &&
+      board[idx(hover[0],hover[1])] === EMPTY){
+    cx2d.fillStyle = toMove()===BLACK ? "rgba(0,0,0,.4)" : "rgba(255,255,255,.65)";
+    cx2d.beginPath();
+    cx2d.arc(o+hover[0]*cell, o+hover[1]*cell, cell*0.47, 0, 7);
+    cx2d.fill();
+  }
+}
+function line(a,b,c,d){ cx2d.beginPath(); cx2d.moveTo(a,b); cx2d.lineTo(c,d); cx2d.stroke(); }
+function drawStone(px,py,r,black){
+  const g = cx2d.createRadialGradient(px-r*0.3, py-r*0.35, r*0.1, px, py, r*1.4);
+  if (black){ g.addColorStop(0,"#5c5c66"); g.addColorStop(.35,"#2c2c33"); g.addColorStop(1,"#0c0c10"); }
+  else { g.addColorStop(0,"#ffffff"); g.addColorStop(.5,"#f1f1ea"); g.addColorStop(1,"#c9c9bd"); }
+  cx2d.fillStyle = g;
+  cx2d.beginPath(); cx2d.arc(px,py,r,0,7); cx2d.fill();
+}
+function roundRect(x,y,w,h,r){
+  cx2d.beginPath();
+  cx2d.moveTo(x+r,y); cx2d.arcTo(x+w,y,x+w,y+h,r); cx2d.arcTo(x+w,y+h,x,y+h,r);
+  cx2d.arcTo(x,y+h,x,y,r); cx2d.arcTo(x,y,x+w,y,r); cx2d.closePath();
+}
+
+/* клик/тап → ближайшее пересечение (порог — половина клетки) */
+cv.addEventListener("pointermove", (ev) => {
+  hover = vertexAt(ev); if (hover) draw();
+});
+cv.addEventListener("pointerleave", () => { hover = null; draw(); });
+cv.addEventListener("pointerdown", (ev) => {
+  const v = vertexAt(ev);
+  if (!v || gameOver) return;
+  if (mode === "net") return netTryMove(v);   /* судья — сервер */
+  const color = toMove();
+  try {
+    play(v[0], v[1], color);
+    draw(); refreshInfo();
+    if (mode === "ai" && !gameOver) setTimeout(aiTurn, 380);
+  } catch(e){ frToast(e.message); }
+});
+function vertexAt(ev){
+  const rect = cv.getBoundingClientRect();
+  const cell = (rect.width - 40) / (size - 1), o = 24;
+  const px = (ev.clientX - rect.left) * (cv.clientWidth / rect.width);
+  const py = (ev.clientY - rect.top) * (cv.clientHeight / rect.height);
+  const x = Math.round((px-o)/cell), y = Math.round((py-o)/cell);
+  if (x<0 || y<0 || x>=size || y>=size) return null;
+  if (Math.abs(px-(o+x*cell)) > cell*0.5 || Math.abs(py-(o+y*cell)) > cell*0.5)
+    return null;
+  return [x,y];
+}
+
+/* ═══════════════ ход ИИ / финалы / UI ═══════════════ */
+function aiTurn(){
+  if (gameOver || toMove() !== WHITE) return;
+  const mv = aiChooseMove(WHITE);
+  if (mv === null){ passTurn(); frToast("🤖 ИИ: пас"); }
+  else {
+    try { play(mv[0], mv[1], WHITE); } catch(e){ passTurn(); }
+  }
+  draw(); refreshInfo();
+  if (gameOver) finishGame();
+}
+function finishGame(){
+  const sc = areaScore();
+  showScore(sc);
+  if (mode === "ai"){
+    const n = Number(localStorage.getItem("wr_go_games") || 0) + 1;
+    localStorage.setItem("wr_go_games", String(n));
+    if ((sc.winner === "black")){   /* игрок в режиме ИИ всегда чёрные */
+      const w = Number(localStorage.getItem("wr_go_ai_wins") || 0) + 1;
+      localStorage.setItem("wr_go_ai_wins", String(w));
+      frToast("🏆 Победа над ИИ #" + w + "!");
+    }
+    refreshInfo();
+  }
+}
+function newGame(){
+  const prev = mode;
+  mode = document.getElementById("modeSel").value;
+  /* уходя из сетевого режима — тихо покидаем матч (идущий = сдача) */
+  if (prev === "net" && mode !== "net") netLeaveSilent();
+  updateNetUI();
+  if (mode === "net"){ netLobby(); return; }
+  size = parseInt(document.getElementById("sizeSel").value, 10) || 9;
+  board = new Array(size*size).fill(EMPTY);
+  captured = [0,0,0]; koPoint = null; passesInRow = 0;
+  moveNumber = 0; lastMove = null; gameOver = false; hover = null;
+  document.getElementById("scoreWin").classList.add("hidden");
+  fitCanvas(); refreshInfo();
+}
+function doPass(){
+  if (gameOver) return;
+  if (mode === "net") return netSendMove("pass");   /* решает сервер */
+  const who = toMove()===BLACK ? "Чёрные" : "Белые";
+  passTurn(); draw(); refreshInfo();
+  if (gameOver) finishGame();
+  else {
+    frToast(who + ": пас");
+    if (mode === "ai" && toMove() === WHITE) setTimeout(aiTurn, 380);
+  }
+}
+function showScore(sc){
+  document.getElementById("scoreTable").style.display = "";
+  document.getElementById("netScoreLine").textContent = "";
+  document.getElementById("scoreBlack").textContent = sc.black;
+  document.getElementById("scoreWhite").textContent = sc.white + " + " + sc.komi + " = " + sc.whiteWithKomi;
+  document.getElementById("scoreKomi").textContent = sc.komi;
+  const wEl = document.getElementById("scoreWinner");
+  if (sc.winner === "draw"){
+    wEl.textContent = "🤝 Дзиго (ничья)!";
+    wEl.className = "big";
+  } else if (sc.winner === "black"){
+    wEl.textContent = "⚫ Победа чёрных (+" + sc.margin + ")";
+    wEl.className = "big win-black";
+  } else {
+    wEl.textContent = "⚪ Победа белых (+" + sc.margin + ")";
+    wEl.className = "big win-white";
+  }
+  document.getElementById("scoreWin").classList.remove("hidden");
+}
+function refreshInfo(){
+  const t = document.getElementById("turnInfo");
+  if (mode === "net"){
+    const m = NET.match;
+    if (!m) t.textContent = "нет матча";
+    else if (m.status === "waiting")
+      t.textContent = "⏳ ждём: " + m.match_id;
+    else if (m.status === "finished")
+      t.textContent = m.result === "draw" ? "ничья"
+        : (m.result === "black" ? "⚫ победили" : "⚪ победили");
+    else if (NET.myColor === null) t.textContent = "наблюдатель";
+    else t.textContent = netMyTurn() ? "🎯 ТВОЙ ХОД" : "ход соперника…";
+  } else if (gameOver){
+    const sc = areaScore();
+    t.textContent = sc.winner === "draw" ? "ничья"
+      : (sc.winner === "black" ? "⚫ победили" : "⚪ победили");
+  } else {
+    const side = toMove()===BLACK ? "⚫ чёрные" : "⚪ белые";
+    t.textContent = "ход: " + side;
+  }
+  document.getElementById("capInfo").textContent =
+    "взято: " + captured[BLACK] + " : " + captured[WHITE];
+  const wins = Number(localStorage.getItem("wr_go_ai_wins") || 0);
+  const games = Number(localStorage.getItem("wr_go_games") || 0);
+  document.getElementById("recInfo").textContent =
+    "🏆 " + wins + (games ? " / " + games : "");
+}
+
+/* ═══════════════ сетевой матч (v2.0.7) ═══════════════
+   Судья — GoBot на сервере (lib/bots/go.py): host/join/move/state/
+   resign/leave через POST /bot_command (fr_api-мост в games.js).
+   Локальный движок НЕ судит — только проигрывает историю ходов из
+   match.moves для отрисовки (тот же подход, что у Qt-доски). Хост
+   играет чёрными, присоединившийся — белыми (+коми). */
+function netStatus(t){
+  document.getElementById("netStatus").textContent = t || "";
+}
+function netMyTurn(){
+  return !!(NET.match && NET.match.status === "playing" &&
+            NET.myColor !== null && toMove() === NET.myColor);
+}
+function vertexName(x, y){ return LETTERS[x] + String(size - y); }
+function parseNetVertex(s){
+  /* "D4" → [x,y]; сервер шлёт уже каноничные вершины — это для реплея */
+  const t = (s || "").trim().toUpperCase();
+  if (t === "PASS") return null;
+  const xi = LETTERS.indexOf(t[0]);
+  const num = parseInt(t.slice(1), 10);
+  if (xi < 0 || !num || num < 1 || num > size) return null;
+  return [xi, size - num];
+}
+async function netCmd(command, args){
+  const json = await frApi("/bot_command",
+    {bot_id: "go", command, args: args || []});
+  if (!json || json.ok !== true)
+    throw new Error((json && json.error) || "ошибка сервера");
+  handleNetAction(json);
+  return json;
+}
+function handleNetAction(json){
+  const a = (json && json.bot_action) || {};
+  if (a.action === "error"){ netStatus(a.text || "ошибка"); return; }
+  if (a.action === "match_left"){
+    stopNetPoll(); NET.match = null; NET.myColor = null;
+    updateNetUI(); refreshInfo(); return;
+  }
+  if (a.match) applyNetMatch(a.match);
+  if (a.text && a.action !== "match_state") netStatus(a.text);
+}
+function netResetBoard(n){
+  size = n;
+  board = new Array(size*size).fill(EMPTY);
+  captured = [0,0,0]; koPoint = null; passesInRow = 0;
+  moveNumber = 0; lastMove = null; gameOver = false; hover = null;
+  document.getElementById("scoreWin").classList.add("hidden");
+  fitCanvas();
+}
+function replayNetMoves(moves){
+  /* чистая позиция → применяем историю: взятия/ко/пасы повторяются
+     ровно как на сервере (движок — порт того же go_engine.py) */
+  board = new Array(size*size).fill(EMPTY);
+  captured = [0,0,0]; koPoint = null; passesInRow = 0;
+  moveNumber = 0; lastMove = null; gameOver = false;
+  for (const mv of moves || []){
+    if (mv === "pass"){ passTurn(); continue; }
+    const v = parseNetVertex(mv);
+    if (v === null) continue;
+    try { play(v[0], v[1], toMove()); } catch(e){ break; }
+  }
+}
+function applyNetMatch(m){
+  if (!m){
+    NET.match = null; NET.myColor = null;
+    updateNetUI(); draw(); refreshInfo();
+    return;
+  }
+  const changed = JSON.stringify(NET.match) !== JSON.stringify(m);
+  NET.match = m;
+  NET.myColor = m.black === FR_NAME ? BLACK
+    : (m.white === FR_NAME ? WHITE : null);
+  if (size !== m.size) netResetBoard(m.size);   /* доска = размер матча */
+  if (changed) replayNetMoves(m.moves || []);
+  updateNetUI(); draw(); refreshInfo();
+  if (m.status === "finished" && changed) showNetResult(m);
+}
+function showNetResult(m){
+  document.getElementById("scoreTable").style.display = "none";
+  const wEl = document.getElementById("scoreWinner");
+  const mine = m.result === "black" ? NET.myColor === BLACK
+             : m.result === "white" ? NET.myColor === WHITE : null;
+  if (m.result === "draw") wEl.textContent = "🤝 Дзиго (ничья)!";
+  else if (NET.myColor === null)
+    wEl.textContent = m.result === "black" ? "⚫ Победа чёрных" : "⚪ Победа белых";
+  else wEl.textContent = mine ? "🏆 Ты победил!" : "😞 Ты проиграл";
+  wEl.className = "big " + (m.result === "white" ? "win-white" : "win-black");
+  document.getElementById("netScoreLine").textContent =
+    m.score ? "Счёт (площадь): " + m.score : "";
+  document.getElementById("scoreWin").classList.remove("hidden");
+  frToast("🏁 Матч завершён");
+}
+function updateNetUI(){
+  const isNet = mode === "net";
+  document.getElementById("netBar").classList.toggle("hidden", !isNet);
+  document.getElementById("netStatus").classList.toggle("hidden", !isNet);
+  const inMatch = isNet && !!NET.match;
+  document.getElementById("btnResign").classList.toggle("hidden",
+    !(inMatch && NET.match.status === "playing"));
+  document.getElementById("btnLeaveNet").classList.toggle("hidden", !inMatch);
+  /* локальные режимы не имеют кнопки «новая игра» */
+  document.getElementById("btnNew").classList.toggle("hidden", isNet);
+}
+function netLobby(){
+  /* идущая партия на сервере не должна «осиротеть» (напр. сменили размер
+     доски в лобби): уход = сдача по правилам сервера */
+  if (NET.match && NET.match.status === "playing"){
+    try { netCmd("leave", []); } catch(e){}
+  }
+  stopNetPoll();
+  NET.match = null; NET.myColor = null;
+  netResetBoard(parseInt(document.getElementById("sizeSel").value, 10) || 9);
+  updateNetUI(); refreshInfo();
+  netStatus("Создай матч (размер доски — селект сверху) или войди по коду. "
+    + "Создавший играет ЧЁРНЫМИ, второй — белыми (+коми).");
+}
+async function netHost(){
+  if (NET.busy) return;
+  NET.busy = true;
+  netStatus("Создаю матч…");
+  try {
+    await netCmd("host",
+      [String(parseInt(document.getElementById("sizeSel").value, 10) || 9)]);
+    startNetPoll();
+  } catch(e){ netStatus("⚠ " + e.message); }
+  finally { NET.busy = false; }
+}
+async function netJoin(){
+  if (NET.busy) return;
+  const code = document.getElementById("netCode").value.trim().toUpperCase();
+  if (!code){ netStatus("⚠ Введи код матча"); return; }
+  NET.busy = true;
+  netStatus("Вхожу в матч " + code + "…");
+  try {
+    await netCmd("join", [code]);
+    startNetPoll();
+  } catch(e){ netStatus("⚠ " + e.message); }
+  finally { NET.busy = false; }
+}
+async function netSendMove(vertex){
+  if (NET.busy) return;
+  NET.busy = true;
+  try { await netCmd("move", [vertex]); }   /* ответ сам применит матч */
+  catch(e){ netStatus("⚠ " + e.message); }
+  finally { NET.busy = false; }
+}
+function netTryMove(v){
+  if (!NET.match || NET.match.status !== "playing"){
+    netStatus("Нет идущего матча — создай или войди по коду");
+    return;
+  }
+  if (NET.myColor === null){ netStatus("Ты наблюдатель этого матча"); return; }
+  if (!netMyTurn()){ frToast("Сейчас ход соперника"); return; }
+  netSendMove(vertexName(v[0], v[1]));
+}
+async function netResign(){
+  if (!NET.match || NET.match.status !== "playing") return;
+  if (!confirm("Сдаться? Соперник получит победу.")) return;
+  try { await netCmd("resign", []); } catch(e){ netStatus("⚠ " + e.message); }
+}
+async function netLeave(){
+  try { await netCmd("leave", []); } catch(e){ /* уже не в матче */ }
+  stopNetPoll();
+  NET.match = null; NET.myColor = null;
+  netLobby();
+  netStatus("Матч покинут. Создай новый или войди по коду.");
+}
+function netLeaveSilent(){
+  /* смена режима при активной партии: уход = сдача (правила сервера) */
+  if (NET.match && NET.match.status === "playing"){
+    try { netCmd("leave", []); } catch(e){}
+  }
+  stopNetPoll();
+  NET.match = null; NET.myColor = null;
+}
+function startNetPoll(){
+  stopNetPoll();
+  NET.poll = setInterval(async () => {
+    if (mode !== "net" || !NET.match || NET.busy) return;
+    NET.busy = true;
+    try { await netCmd("state", []); }   /* silent-команда, чат не спамит */
+    catch(e){ /* сеть моргнула — следующий тик повторит */ }
+    finally { NET.busy = false; }
+  }, 1800);
+}
+function stopNetPoll(){
+  if (NET.poll){ clearInterval(NET.poll); NET.poll = null; }
+}
+
+document.getElementById("btnNew").addEventListener("click", newGame);
+document.getElementById("btnAgain").addEventListener("click", () => {
+  if (mode === "net"){ netLobby(); return; }   /* в сети — в лобби матча */
+  newGame();
+});
+document.getElementById("btnPass").addEventListener("click", doPass);
+document.getElementById("sizeSel").addEventListener("change", newGame);
+document.getElementById("modeSel").addEventListener("change", newGame);
+document.getElementById("btnHost").addEventListener("click", netHost);
+document.getElementById("btnJoin").addEventListener("click", netJoin);
+document.getElementById("netCode").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") netJoin();
+});
+document.getElementById("btnResign").addEventListener("click", netResign);
+document.getElementById("btnLeaveNet").addEventListener("click", netLeave);
+
+newGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,1189 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   nochnik.css — v3.5.9 скины «Ночник» и «Крем-брюле» (nochnik2.html)
+   ─────────────────────────────────────────────────────────────────────
+   Полноценная ВТОРАЯ ПАРАДИГМА интерфейса (не «натяжка» на классику):
+
+     • сверху — планка: лампа-бренд, сигнал хоста, строка ⌘K, инструменты;
+     • слева — комнаты: «Где говорим» (каналы), «Чем заняты» (процессы),
+       «Кто в сети» (люди со свечением вместо зелёных точек), me-dock;
+     • в центре — поток: заголовок места, лента, композер «на бумаге»;
+     • справа — «Сейчас»: живые карточки Голос/Музыка/Игры/Файлы,
+       видны всегда, сворачиваются (из чата не надо уходить).
+
+   СОВМЕСТИМОСТЬ (главный закон — НИЧЕГО НЕ СЛОМАТЬ):
+     • все правила живут ТОЛЬКО под html[data-skin="nochnik"] и
+       html[data-skin="creme"] — без атрибута файл бездействует, и
+       «Классика» остаётся байт в байт прежней;
+     • цвета берутся из ТЕМОВЫХ переменных (--surface/--text/--accent…):
+       все 6 тем (Aurora, Lukewarm Ocean, Snow, Sakura, Cherry Grove,
+       Crème Brûlée) перекрашивают эти скины сами; плагины Appearance
+       Studio (акцент, шрифт, плотность, фон, стекло, баблы) работают;
+     • дефолтные палитры (тёмный «Ночник» и светлый «Крем-брюле»)
+       применяются только пока НЕ выбрана явная тема (:not([data-theme]));
+     • каркас строит nochnik.js: он ПЕРЕНОСИТ существующие панели
+       (#tab-chat, #tab-voice…) в новые колонки через appendChild и
+       возвращает на место при выключении — ни один id/обработчик
+       не теряется.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────── токены → мост к темам ─────────────────────────
+   Дизайн nochnik2.html говорит на своих именах (--panel/--ink/--line…).
+   Здесь они привязаны к тем переменным, которыми управляют темы и
+   Appearance Studio — поэтому «Крем-брюле» и компания красят оба скина. */
+html[data-skin="nochnik"], html[data-skin="creme"]{
+  --nk-panel: var(--surface);
+  --nk-raise: var(--surface2);
+  --nk-raise-2: var(--surface3);
+  --nk-line: var(--border);
+  --nk-line-2: var(--border2);
+  --nk-ink: var(--text);
+  --nk-ink-2: var(--dim);
+  --nk-ink-3: var(--dim-2);
+  --nk-accent-line: var(--accent-border);
+  --nk-accent-2: var(--accent2);
+  --nk-well: color-mix(in srgb, var(--bg) 90%, #000 10%);
+  --nk-bar-bg: color-mix(in srgb, var(--bg) 80%, transparent);
+  --on-accent: #fff;
+  --font-display: "Bricolage Grotesque", "Inter Tight", -apple-system,
+    "Segoe UI", Roboto, system-ui, sans-serif;
+}
+/* текст ПОВЕРХ акцента: тёмный на светлом (янтарная лампа), белый на
+   тёмном (карамель/вино). nochnik.js пересчитывает по яркости, когда
+   акцент меняется плагином или темой. */
+html[data-skin="nochnik"]{--on-accent:#12222a}
+html[data-skin="creme"]{--on-accent:#fff6ea}
+
+/* ── палитра «Ночник» по умолчанию (пока не выбрана явная тема) ── */
+html[data-skin="nochnik"]:not([data-theme]){
+  --bg:#0e1f27; --surface:#142b35; --surface2:#1b3742; --surface3:#224250;
+  --border:rgba(240,230,214,.09); --border2:rgba(240,230,214,.17);
+  --hover-chip:rgba(240,230,214,.05); --panel-soft:rgba(240,230,214,.03);
+  --pop-border:rgba(240,230,214,.15);
+  --text:#f1e7d7; --text-strong:#fff9ef; --dim:#a3b9c0; --dim-2:#6b838c;
+  --accent:#f0a93b; --accent2:#ffc96f;
+  --accent-soft:rgba(240,169,59,.13);
+  --accent-soft-strong:rgba(240,169,59,.4);
+  --accent-border:rgba(240,169,59,.45);
+  --ok:#7bc96f; --err:#e2685e; --warn:#f0a93b;
+  --me-bubble:linear-gradient(135deg,#f0a93b 0%,#f0a93b 100%);
+  --header-bg:rgba(14,31,39,.82); --toast-bg:rgba(20,43,53,.97);
+  --focus-bg:#1b3742; --sec-hover-bg:#1b3742;
+  --sec-hover-border:rgba(240,230,214,.2);
+  --scroll-thumb:#1b3742; --scroll-thumb-hover:#224250;
+  --glow:0 0 0 3px rgba(240,169,59,.2);
+  --thumb-shadow:0 2px 8px rgba(240,169,59,.4);
+  --logo-shadow:0 4px 14px rgba(240,169,59,.2);
+  color-scheme:dark;
+}
+/* ── палитра «Крем-брюле» по умолчанию (светлая, вино на сливках) ── */
+html[data-skin="creme"]:not([data-theme]){
+  --bg:#f6efe1; --surface:#fffbf2; --surface2:#f1e7d2; --surface3:#e7dabc;
+  --border:rgba(80,58,32,.12); --border2:rgba(80,58,32,.22);
+  --hover-chip:rgba(80,58,32,.06); --panel-soft:rgba(80,58,32,.04);
+  --pop-border:rgba(80,58,32,.18);
+  --text:#41311e; --text-strong:#241703; --dim:#7a6450; --dim-2:#8d7963;
+  --accent:#b33a46; --accent2:#cf5a67;
+  --accent-soft:rgba(179,58,70,.11);
+  --accent-soft-strong:rgba(179,58,70,.32);
+  --accent-border:rgba(179,58,70,.5);
+  --ok:#2f8f5b; --err:#c0392b; --warn:#8f6410;
+  --me-bubble:linear-gradient(135deg,#b33a46 0%,#b33a46 100%);
+  --header-bg:rgba(246,239,225,.86); --toast-bg:rgba(255,251,242,.97);
+  --focus-bg:#f1e7d2; --sec-hover-bg:#f1e7d2;
+  --sec-hover-border:rgba(80,58,32,.26);
+  --scroll-thumb:#dcc9a2; --scroll-thumb-hover:#c8b181;
+  --glow:0 0 0 3px rgba(179,58,70,.16);
+  --thumb-shadow:0 2px 8px rgba(179,58,70,.35);
+  --logo-shadow:0 4px 14px rgba(179,58,70,.2);
+  color-scheme:light;
+}
+
+/* лампа и рёбра заменяют классическое лого и точку-статус */
+html[data-skin="nochnik"] .brandlogo,
+html[data-skin="creme"] .brandlogo{display:none}
+html[data-skin="nochnik"] .connpill .dot,
+html[data-skin="creme"] .connpill .dot{display:none}
+
+html[data-skin="nochnik"] #online,
+html[data-skin="creme"] #online{display:none}   /* счётчик живёт в сигнале */
+html[data-skin="nochnik"] .h-tools .nk-toggle,
+html[data-skin="creme"] .h-tools .nk-toggle{display:none !important}
+@media (max-width:1180px){
+  html[data-skin="nochnik"] .h-tools .nk-toggle.nk-t-now,
+  html[data-skin="creme"] .h-tools .nk-toggle.nk-t-now{display:inline-flex !important}
+}
+@media (max-width:820px){
+  html[data-skin="nochnik"] .h-tools .nk-toggle.nk-t-rooms,
+  html[data-skin="creme"] .h-tools .nk-toggle.nk-t-rooms{display:inline-flex !important}
+}
+
+/* лента/композер: бьём классику ЕЁ ЖЕ специфичностью (два id) */
+html[data-skin="nochnik"] body.app-on #tab-chat #feed,
+html[data-skin="creme"] body.app-on #tab-chat #feed,
+html[data-skin="nochnik"] body.app-on #tab-dm #dmFeed,
+html[data-skin="creme"] body.app-on #tab-dm #dmFeed{
+  flex:1; min-height:0; height:auto; padding:18px 6px 8px;
+  gap:var(--gap, 12px); scroll-behavior:smooth;
+}
+html[data-skin="nochnik"] body.app-on #tab-chat #composer,
+html[data-skin="creme"] body.app-on #tab-chat #composer,
+html[data-skin="nochnik"] body.app-on #tab-dm #dmComposer,
+html[data-skin="creme"] body.app-on #tab-dm #dmComposer{
+  flex:none; margin-top:0; padding:10px 0 14px;
+  border-top:1px solid var(--border); background:transparent; gap:10px;
+  display:flex; align-items:flex-end;
+}
+
+/* строка ⌘K — настоящая ширина, а не иконка */
+html[data-skin="nochnik"] #btnPalette,
+html[data-skin="creme"] #btnPalette{
+  flex:0 1 380px; min-width:0;
+}
+
+/* ───────────────────────── атмосфера ───────────────────────── */
+/* «свет из окон»: два тёплых пятна; плагин «Фон» (aurora=лампа) */
+html[data-skin="nochnik"] body::before,
+html[data-skin="creme"] body::before{
+  background:
+    radial-gradient(760px 420px at 16% -6%, var(--accent-soft), transparent 62%),
+    radial-gradient(620px 520px at 104% 88%,
+      color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%);
+  opacity:calc(.55 * var(--bgfx-op, 0) + var(--bgfx-op, 0) * .45);
+}
+html[data-skin="nochnik"][data-bgfx="grid"] body::before,
+html[data-skin="creme"][data-bgfx="grid"] body::before,
+html[data-skin="nochnik"][data-bgfx="dots"] body::before,
+html[data-skin="creme"][data-bgfx="dots"] body::before{opacity:var(--bgfx-op)}
+html[data-skin="nochnik"][data-bgfx="plain"] body::before,
+html[data-skin="creme"][data-bgfx="plain"] body::before{opacity:0}
+html[data-skin="nochnik"] body[data-signal="lost"],
+html[data-skin="creme"] body[data-signal="lost"]{--bgfx-op:0 !important}
+
+/* ───────────────────────── каркас ───────────────────────── */
+html[data-skin="nochnik"] body.app-on main,
+html[data-skin="creme"] body.app-on main{
+  padding:0; max-width:none; margin:0; overflow:hidden;
+}
+html[data-skin="nochnik"] body.app-on #app,
+html[data-skin="creme"] body.app-on #app{
+  max-width:none; padding:0; position:relative; overflow:hidden;
+}
+/* рейл-остров классики больше не нужен — его место заняла колонка комнат */
+html[data-skin="nochnik"] body.app-on header,
+html[data-skin="creme"] body.app-on header{padding-left:18px}
+html[data-skin="nochnik"] .tabs,
+html[data-skin="creme"] .tabs{display:none !important}
+
+/* сама сетка скинов: комнаты | поток | сейчас */
+.nk{
+  position:absolute; inset:0; display:grid;
+  /* ширину колонок подстраивают ручки .nk-h, выбор помнится */
+  grid-template-columns:
+    var(--nk-rooms-w, 264px) minmax(0, 1fr) var(--nk-now-w, 316px);
+  grid-template-areas:"rooms stream now";
+  background:transparent;
+}
+.nk-rooms{grid-area:rooms}
+.nk-stream{grid-area:stream; position:relative; min-width:0}
+.nk-now{grid-area:now}
+
+/* ручки ширины боковых колонок: потянул — подстроил под себя,
+   двойной клик — вернуть как было. На шторках (≤1180/≤820) спрятаны */
+.nk-h{
+  position:absolute; top:0; bottom:0; width:10px; z-index:9;
+  cursor:col-resize; touch-action:none;
+}
+.nk-h::after{
+  content:""; position:absolute; top:0; bottom:0; left:3.5px; width:3px;
+  border-radius:2px; background:transparent;
+  transition:background var(--dur-fast) var(--ease-out);
+}
+.nk-h:hover::after, .nk-h.drag::after{background:var(--accent-border)}
+.nk-h-rooms{left:calc(var(--nk-rooms-w, 264px) - 5px)}
+.nk-h-now{right:calc(var(--nk-now-w, 316px) - 5px)}
+body.nk-drag{cursor:col-resize; user-select:none}
+@media (max-width:1180px){ .nk-h-now{display:none} }
+@media (max-width:820px){ .nk-h-rooms{display:none} }
+
+/* панели — сырье: в скине они становятся невидимыми контейнерами,
+   вид им придаёт окружение (поток/карточка) */
+html[data-skin="nochnik"] .nk .panel,
+html[data-skin="creme"] .nk .panel{
+  background:transparent; border:0; border-radius:0; padding:0;
+  margin:0; animation:none;
+}
+/* места — занимают поток целиком */
+html[data-skin="nochnik"] .nk-stream > .panel,
+html[data-skin="creme"] .nk-stream > .panel{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  overflow:hidden; padding:0 26px;
+}
+html[data-skin="nochnik"] .nk-stream > .panel.hidden,
+html[data-skin="creme"] .nk-stream > .panel.hidden{display:none}
+
+/* ───────────────────────── верхняя планка ───────────────────────── */
+html[data-skin="nochnik"] header,
+html[data-skin="creme"] header{
+  gap:14px; padding:9px 14px 9px 18px; flex-wrap:nowrap;
+  background:var(--header-bg);
+  backdrop-filter:blur(var(--glass-blur)) saturate(1.3);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.3);
+}
+html[data-skin="nochnik"] .h-brand,
+html[data-skin="creme"] .h-brand{border-right:0; padding-right:0; gap:9px}
+html[data-skin="nochnik"] .h-brand b,
+html[data-skin="creme"] .h-brand b{
+  font-family:var(--font-display); font-weight:800; font-size:16.5px;
+  letter-spacing:-.03em; gap:9px;
+}
+html[data-skin="nochnik"] .h-brand b .hint,
+html[data-skin="creme"] .h-brand b .hint{
+  background:transparent; border:0; padding:0; font-size:10px;
+  letter-spacing:.1em;
+}
+/* лампа-бренд (вместо квадратного лого) — свет гаснет при потере хоста */
+.nk-lamp{
+  width:19px; height:19px; flex:none; border-radius:50%;
+  background:radial-gradient(circle at 34% 30%, var(--accent2),
+    var(--accent) 58%, transparent 78%);
+  box-shadow:0 0 16px 2px var(--accent-soft);
+  transition:filter 700ms var(--ease-out), box-shadow 700ms var(--ease-out);
+}
+body[data-signal="lost"] .nk-lamp{
+  filter:grayscale(1) brightness(.45); box-shadow:none;
+}
+/* сигнал хоста: горизонтальные «рёбра» вместо точки */
+.nk-bars{display:flex; align-items:flex-end; gap:2px; height:12px; flex:none}
+.nk-bars i{
+  width:3px; border-radius:1px; background:var(--accent);
+  opacity:.28; display:block; transition:opacity .3s var(--ease-out);
+}
+.nk-bars i:nth-child(1){height:4px}
+.nk-bars i:nth-child(2){height:7px}
+.nk-bars i:nth-child(3){height:10px}
+.nk-bars i:nth-child(4){height:13px}
+.nk-bars i.lit{opacity:1}
+html[data-skin="nochnik"] .connpill,
+html[data-skin="creme"] .connpill{
+  gap:9px; padding:5px 11px 5px 9px; cursor:pointer;
+  background:var(--surface); font-size:12.5px;
+}
+html[data-skin="nochnik"] body[data-signal="lost"] .connpill,
+html[data-skin="creme"] body[data-signal="lost"] .connpill{
+  border-color:color-mix(in srgb, var(--err) 45%, transparent);
+  color:var(--err);
+}
+html[data-skin="nochnik"] body[data-signal="lost"] .nk-bars i,
+html[data-skin="creme"] body[data-signal="lost"] .nk-bars i{
+  background:var(--err); opacity:.22;
+}
+html[data-skin="nochnik"] body[data-signal="lost"] .dot.on,
+html[data-skin="creme"] body[data-signal="lost"] .dot.on{background:var(--err)}
+/* строка ⌘K — общий вход в командную палитру */
+html[data-skin="nochnik"] #btnPalette,
+html[data-skin="creme"] #btnPalette{
+  flex:1; max-width:420px; min-width:0; display:flex; align-items:center;
+  gap:9px; padding:8px 13px; border-radius:11px; height:auto;
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--dim-2); font-weight:400; font-size:13px; letter-spacing:0;
+  justify-content:flex-start;
+}
+html[data-skin="nochnik"] #btnPalette:hover,
+html[data-skin="creme"] #btnPalette:hover{
+  border-color:var(--accent-border); color:var(--dim); transform:none;
+  background:var(--surface);
+}
+html[data-skin="nochnik"] #btnPalette .ico,
+html[data-skin="creme"] #btnPalette .ico{width:15px; height:15px; flex:none}
+.nk-kbar-t{
+  flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.nk-kbd{
+  font:600 10px/1 ui-monospace, monospace; padding:4px 6px;
+  border-radius:5px; background:var(--surface2);
+  border:1px solid var(--border2); color:var(--dim-2); flex:none;
+}
+html[data-skin="nochnik"] #hostInfo,
+html[data-skin="creme"] #hostInfo{
+  background:transparent; border:0; padding:0;
+}
+html[data-skin="nochnik"] .h-tools button,
+html[data-skin="creme"] .h-tools button{
+  width:32px; height:32px; min-width:32px; padding:0; border-radius:9px;
+  background:transparent; border:1px solid transparent; color:var(--dim);
+}
+html[data-skin="nochnik"] .h-tools button:hover,
+html[data-skin="creme"] .h-tools button:hover{
+  background:var(--surface2); color:var(--text); border-color:var(--border);
+  transform:none;
+}
+html[data-skin="nochnik"] .h-tools .h-divider,
+html[data-skin="creme"] .h-tools .h-divider{background:var(--border)}
+
+/* ───────────────────────── колонка комнат ───────────────────────── */
+.nk-rooms{
+  border-right:1px solid var(--border); overflow-y:auto; overflow-x:hidden;
+  padding:16px 10px 16px 14px; display:flex; flex-direction:column;
+  gap:20px; scrollbar-width:thin;
+}
+.nk-lbl{
+  font-family:var(--font-display); font-size:11.5px; font-weight:600;
+  color:var(--dim-2); letter-spacing:.01em; margin:0 0 7px 8px;
+  display:flex; align-items:center; gap:6px; user-select:none;
+  cursor:pointer;
+}
+.nk-lbl:hover{color:var(--dim)}
+/* клик по заголовку секции сворачивает/разворачивает её — колонка
+   вмещает всё, что нужно прямо сейчас (выбор помнится) */
+.nk-lbl .nk-caret{
+  flex:none; width:9px; height:9px; opacity:.55;
+  transition:transform var(--dur-fast) var(--ease-out);
+}
+.nk-sec.folded .nk-lbl .nk-caret{transform:rotate(-90deg)}
+.nk-sec.folded .nk-group{display:none}
+.nk-lbl button{
+  margin-left:auto; width:22px; height:22px; min-width:22px; padding:0;
+  border-radius:6px; background:transparent; border:0; color:var(--dim-2);
+}
+.nk-lbl button:hover{background:var(--surface2); color:var(--text)}
+.nk-lbl button .ico{width:13px; height:13px}
+.nk-group{display:flex; flex-direction:column; gap:1px}
+/* строка комнаты/места */
+.nk-room{
+  display:flex; align-items:center; gap:9px; width:100%;
+  padding:8px 9px; border-radius:var(--radius-sm);
+  border:1px solid transparent; background:transparent;
+  color:var(--dim); font:inherit; font-size:14px; cursor:pointer;
+  text-align:left; font-weight:500; letter-spacing:-.005em;
+  transition:background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.nk-room:hover{background:var(--surface2); color:var(--text); transform:none}
+.nk-room.act{
+  background:var(--accent-soft); color:var(--text);
+  border-color:var(--accent-border); font-weight:600;
+}
+.nk-room .hash{color:var(--dim-2); font-weight:500; flex:none}
+.nk-room.act .hash{color:var(--accent)}
+.nk-room .nm{
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.nk-room > .ico{width:16px; height:16px; flex:none; color:var(--dim-2)}
+.nk-room.act > .ico{color:var(--accent)}
+.nk-room.live > .ico{color:var(--accent)}
+/* лица внутри комнаты — главный ход концепта */
+.nk-faces{display:flex; align-items:center; flex:none}
+.nk-faces .f{
+  width:20px; height:20px; border-radius:7px; margin-left:-6px;
+  display:grid; place-items:center; font-size:9.5px; font-weight:700;
+  color:#fff; border:1.5px solid var(--bg); font-style:normal;
+  background-size:cover; background-position:50%;
+}
+.nk-faces .f:first-child{margin-left:0}
+/* непрочитанные ЛС — бейдж-пилюля */
+.nk-unread{
+  min-width:18px; height:18px; padding:0 5px; border-radius:6px;
+  background:var(--accent); color:var(--on-accent);
+  font-size:11px; font-weight:700; display:grid; place-items:center;
+  font-variant-numeric:tabular-nums; flex:none;
+}
+/* люди: свечение вместо зелёных точек */
+.nk-person{
+  display:flex; align-items:center; gap:10px; width:100%;
+  padding:7px 9px; border-radius:var(--radius-sm);
+  border:1px solid transparent; background:transparent; color:inherit;
+  font:inherit; cursor:pointer; text-align:left;
+  transition:background var(--dur-fast) var(--ease-out);
+}
+.nk-person:hover{background:var(--surface2); transform:none}
+.nk-av{
+  width:30px; height:30px; border-radius:10px; flex:none;
+  display:grid; place-items:center; font-size:12px; font-weight:700;
+  color:#fff; position:relative; background-size:cover;
+  background-position:50%;
+}
+.nk-av.off{filter:grayscale(1) brightness(.6); opacity:.55}
+.nk-av.lit::after{
+  content:""; position:absolute; inset:-3px; border-radius:13px;
+  box-shadow:0 0 12px 1px var(--accent-soft); pointer-events:none;
+}
+.nk-ptxt{min-width:0; flex:1; display:flex; flex-direction:column}
+.nk-pnm{
+  font-size:13.5px; font-weight:600; color:var(--text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.nk-pdo{
+  font-size:11.5px; color:var(--dim-2);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.nk-pdo em{font-style:normal; color:var(--accent)}
+.nk-person.off .nk-pnm{color:var(--dim-2); font-weight:500}
+.nk-empty{
+  font-size:12px; color:var(--dim-2); line-height:1.5; padding:6px 9px;
+}
+/* me-dock: своё имя + микрофон */
+.nk-medock{
+  margin-top:auto; display:flex; align-items:center; gap:6px;
+  padding:9px; border-radius:var(--radius); border:1px solid var(--border);
+  background:var(--surface); flex:none;
+  transition:border-color var(--dur-fast) var(--ease-out);
+}
+.nk-medock:has(.nk-medock-main:hover){border-color:var(--accent-border)}
+.nk-medock-main{
+  display:flex; align-items:center; gap:10px; flex:1; min-width:0;
+  border:0; background:none; padding:0; margin:0; color:inherit;
+  font:inherit; text-align:left; cursor:pointer;
+}
+.nk-medock-main .nk-pnm{font-size:13.5px}
+.nk-medock .nk-mic{
+  margin-left:auto; flex:none; width:32px; height:32px; min-width:32px;
+  border-radius:9px; background:transparent; border:0; color:var(--dim);
+}
+.nk-medock .nk-mic:hover{background:var(--surface2); color:var(--text)}
+.nk-medock .nk-mic .ico{width:17px; height:17px}
+.nk-medock .nk-mic.mut{color:var(--err)}
+
+/* ───────────────────────── центр: поток ───────────────────────── */
+.nk-head{
+  flex:none; display:flex; align-items:center; gap:12px;
+  padding:13px 0 12px; border-bottom:1px solid var(--border);
+  min-height:54px;
+}
+.nk-head-tt{min-width:0}
+.nk-title{
+  font-family:var(--font-display); font-size:16px; font-weight:600;
+  letter-spacing:-.02em; display:flex; align-items:baseline; gap:8px;
+  color:var(--text-strong); white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis;
+}
+.nk-title .hash{color:var(--dim-2); font-weight:400}
+.nk-sub{
+  font-size:12px; color:var(--dim-2); margin-top:1px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  min-height:15px;
+}
+.nk-head-tools{margin-left:auto; display:flex; align-items:center;
+  gap:8px; flex:none}
+/* родной chatTop становится строкой инструментов под заголовком */
+html[data-skin="nochnik"] .chatTop,
+html[data-skin="creme"] .chatTop{
+  margin:0; padding:9px 0 0; border-bottom:1px solid var(--border);
+  flex-wrap:nowrap;
+}
+html[data-skin="nochnik"] .chatTop select,
+html[data-skin="creme"] .chatTop select{display:none}   /* каналы — слева */
+html[data-skin="nochnik"] .chatTop button,
+html[data-skin="creme"] .chatTop button{
+  width:30px; height:30px; min-width:30px; padding:0; border-radius:8px;
+  background:transparent; border:1px solid transparent; color:var(--dim);
+}
+html[data-skin="nochnik"] .chatTop button:hover,
+html[data-skin="creme"] .chatTop button:hover{
+  background:var(--surface2); border-color:var(--border); color:var(--text);
+  transform:none;
+}
+html[data-skin="nochnik"] .chatTop #searchBox,
+html[data-skin="creme"] .chatTop #searchBox{
+  width:auto; flex:1; max-width:280px; min-width:120px; height:30px;
+  padding:0 12px 0 32px; border-radius:999px; background-color:var(--surface);
+}
+html[data-skin="nochnik"] .chatTop #searchStat,
+html[data-skin="creme"] .chatTop #searchStat{font-size:11px}
+
+/* лента: колодец, свои отступы (базовые правила — см. блок выше
+   с body.app-on; здесь только запасные для без-app режима) */
+.nk-day{
+  display:flex; align-items:center; gap:12px; color:var(--dim-2);
+  font-size:11.5px; margin:6px 0 2px; user-select:none;
+}
+.nk-day::before, .nk-day::after{
+  content:""; flex:1; height:1px; background:var(--border);
+}
+/* бабл: аватар + кто/когда + тело «на бумаге» */
+html[data-skin="nochnik"] .msg,
+html[data-skin="creme"] .msg{
+  max-width:min(680px, 88%); padding:0; border:0; border-radius:0;
+  background:transparent; box-shadow:none; gap:11px; align-items:flex-start;
+}
+html[data-skin="nochnik"] .msg.me,
+html[data-skin="creme"] .msg.me{align-self:flex-end}
+html[data-skin="nochnik"] .msg .bava,
+html[data-skin="creme"] .msg .bava{
+  width:32px; height:32px; border-radius:11px; margin-top:2px; flex:none;
+  font-size:11.5px;
+}
+html[data-skin="nochnik"] .msg .mbody,
+html[data-skin="creme"] .msg .mbody{
+  background:transparent; border:0; padding:0; margin:0; display:block;
+  min-width:0; flex:1;
+}
+html[data-skin="nochnik"] .msg .who,
+html[data-skin="creme"] .msg .who{
+  font-size:13px; margin-bottom:3px; gap:8px;
+}
+html[data-skin="nochnik"] .msg .who .nm,
+html[data-skin="creme"] .msg .who .nm{
+  font-size:13px; font-weight:700; letter-spacing:-.01em;
+}
+html[data-skin="nochnik"] .msg .who .tm,
+html[data-skin="creme"] .msg .who .tm{font-size:11px}
+/* тело сообщения — плашка с «хвостиком» угла */
+html[data-skin="nochnik"] .msg .txt,
+html[data-skin="creme"] .msg .txt{
+  padding:9px 13px; border-radius:14px 14px 14px 5px;
+  background:var(--surface); border:1px solid var(--border);
+  font-size:14.5px; line-height:1.52;
+}
+html[data-skin="nochnik"] .msg.me .txt,
+html[data-skin="creme"] .msg.me .txt{
+  border-radius:14px 14px 5px 14px; background:var(--accent);
+  border-color:var(--accent); color:var(--on-accent); font-weight:500;
+}
+html[data-skin="nochnik"] .msg.me .who,
+html[data-skin="creme"] .msg.me .who{flex-direction:row-reverse}
+html[data-skin="nochnik"] .msg.me .who .nm,
+html[data-skin="creme"] .msg.me .who .nm{
+  color:var(--accent);
+}
+html[data-skin="nochnik"] .msg .bava,
+html[data-skin="creme"] .msg .bava{background-size:cover;
+  background-position:50%}
+html[data-skin="nochnik"][data-avatars="off"] .msg .bava,
+html[data-skin="creme"][data-avatars="off"] .msg .bava{display:none}
+/* плагин «Сообщения» в языке скина */
+html[data-skin="nochnik"][data-bubbles="flat"] .msg .txt,
+html[data-skin="creme"][data-bubbles="flat"] .msg .txt{
+  border-radius:var(--radius-sm); box-shadow:none;
+}
+html[data-skin="nochnik"][data-bubbles="outline"] .msg .txt,
+html[data-skin="creme"][data-bubbles="outline"] .msg .txt{
+  background:transparent; border-color:var(--border2);
+}
+html[data-skin="nochnik"][data-bubbles="outline"] .msg.me .txt,
+html[data-skin="creme"][data-bubbles="outline"] .msg.me .txt{
+  background:transparent; color:var(--accent); border-color:var(--accent-border);
+  font-weight:400;
+}
+html[data-skin="nochnik"][data-bubbles="ink"] .msg .txt,
+html[data-skin="creme"][data-bubbles="ink"] .msg .txt{
+  background:transparent; border-color:transparent; padding:2px 0;
+}
+html[data-skin="nochnik"][data-bubbles="ink"] .msg.me .txt,
+html[data-skin="creme"][data-bubbles="ink"] .msg.me .txt{
+  background:transparent; color:var(--accent); font-weight:400;
+}
+/* зашифрованное без ключа — «запертая» плашка, не ошибка */
+html[data-skin="nochnik"] .msg .txt,
+html[data-skin="creme"] .msg .txt{position:relative}
+html[data-skin="nochnik"] .msg.file .txt a,
+html[data-skin="creme"] .msg.file .txt a{color:var(--accent)}
+html[data-skin="nochnik"] .msg.me.file .txt a,
+html[data-skin="creme"] .msg.me.file .txt a{color:inherit}
+/* реакции/действия — пилюля НАД углом бабла (как в v3.5.5) */
+html[data-skin="nochnik"] .msg .rx,
+html[data-skin="creme"] .msg .rx{margin-top:5px}
+html[data-skin="nochnik"] .msg .acts,
+html[data-skin="creme"] .msg .acts{top:-16px}
+/* системная строка — дневная метка в миниатюре */
+html[data-skin="nochnik"] .sysline,
+html[data-skin="creme"] .sysline{
+  letter-spacing:.05em; text-transform:none; font-size:11px;
+}
+html[data-skin="nochnik"] .sysline::before,
+html[data-skin="creme"] .sysline::before,
+html[data-skin="nochnik"] .sysline::after,
+html[data-skin="creme"] .sysline::after{content:""; flex:1; height:1px;
+  background:var(--border); align-self:center}
+html[data-skin="nochnik"] .sysline{display:flex; gap:8px; width:100%;
+  text-align:center; justify-content:center}
+
+/* композер: одна строка «на бумаге» — база уже в блоке body.app-on */
+html[data-skin="nochnik"] #composer #msgText,
+html[data-skin="creme"] #composer #msgText,
+html[data-skin="nochnik"] #dmComposer #dmText,
+html[data-skin="creme"] #dmComposer #dmText{
+  flex:1; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:10px 14px; font-size:14.5px;
+  height:auto; min-height:41px;
+}
+html[data-skin="nochnik"] #composer #msgText:focus,
+html[data-skin="creme"] #composer #msgText:focus,
+html[data-skin="nochnik"] #dmComposer #dmText:focus,
+html[data-skin="creme"] #dmComposer #dmText:focus{
+  border-color:var(--accent-border); background:var(--surface);
+  box-shadow:none;
+}
+html[data-skin="nochnik"] #btnSend,
+html[data-skin="creme"] #btnSend,
+html[data-skin="nochnik"] #btnDmSend,
+html[data-skin="creme"] #btnDmSend{
+  width:41px; height:41px; min-width:41px; border-radius:13px;
+  background:var(--accent); border-color:var(--accent);
+  color:var(--on-accent);
+}
+html[data-skin="nochnik"] #btnSend:hover,
+html[data-skin="creme"] #btnSend:hover,
+html[data-skin="nochnik"] #btnDmSend:hover,
+html[data-skin="creme"] #btnDmSend:hover{
+  background:var(--accent2); border-color:var(--accent2); filter:brightness(1.05);
+}
+html[data-skin="nochnik"] #btnEmoji,
+html[data-skin="creme"] #btnEmoji,
+html[data-skin="nochnik"] .dmbtn,
+html[data-skin="creme"] .dmbtn{
+  width:41px; height:41px; min-width:41px; border-radius:13px;
+  background:transparent; border:1px solid var(--border); color:var(--dim);
+}
+html[data-skin="nochnik"] #btnEmoji:hover,
+html[data-skin="creme"] #btnEmoji:hover,
+html[data-skin="nochnik"] .dmbtn:hover,
+html[data-skin="creme"] .dmbtn:hover{
+  background:var(--surface2); border-color:var(--border2); color:var(--text);
+  transform:none;
+}
+/* ЛС-подсказка и предупреждения — тише */
+html[data-skin="nochnik"] #tab-dm > .hint,
+html[data-skin="creme"] #tab-dm > .hint{flex:none; margin-top:8px}
+
+/* профиль в потоке — «карточка в потоке», не окно */
+html[data-skin="nochnik"] #tab-profile,
+html[data-skin="creme"] #tab-profile{overflow-y:auto; padding-top:18px}
+html[data-skin="nochnik"] .profhead,
+html[data-skin="creme"] .profhead{
+  background:transparent; border:0; padding:0; gap:16px; margin-bottom:8px;
+}
+html[data-skin="nochnik"] .bigavatar,
+html[data-skin="creme"] .bigavatar{
+  width:64px; height:64px; border-radius:18px; font-size:22px;
+  background-color:var(--accent); border:0;
+}
+html[data-skin="nochnik"] .profName,
+html[data-skin="creme"] .profName{font-family:var(--font-display);
+  letter-spacing:-.02em}
+html[data-skin="nochnik"] .subhead,
+html[data-skin="creme"] .subhead{
+  font-family:var(--font-display); font-size:11.5px; letter-spacing:.01em;
+  text-transform:none; font-weight:600;
+}
+html[data-skin="nochnik"] .friendrow,
+html[data-skin="creme"] .friendrow{
+  background:transparent; border:0; border-radius:var(--radius-sm);
+  padding:7px 9px;
+}
+html[data-skin="nochnik"] .friendrow:hover,
+html[data-skin="creme"] .friendrow:hover{
+  background:var(--surface2); transform:none;
+}
+html[data-skin="nochnik"] .friendrow .friendava,
+html[data-skin="creme"] .friendrow .friendava{
+  border-radius:9px; background-size:cover; background-position:50%;
+}
+
+/* шахматы — как место потока */
+html[data-skin="nochnik"] .chess-back,
+html[data-skin="creme"] .chess-back{
+  background:transparent; border:1px solid var(--border); color:var(--dim);
+  margin-bottom:10px;
+}
+html[data-skin="nochnik"] .chess-back:hover,
+html[data-skin="creme"] .chess-back:hover{background:var(--surface2);
+  color:var(--text); transform:none}
+
+/* ───────────────────────── правая колонка «Сейчас» ───────────────────── */
+.nk-now{
+  border-left:1px solid var(--border); overflow-y:auto; overflow-x:hidden;
+  padding:16px 14px; display:flex; flex-direction:column; gap:12px;
+  scrollbar-width:thin;
+}
+.nk-card{
+  border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--surface); overflow:hidden; flex:none;
+}
+.nk-ch{
+  display:flex; align-items:center; gap:9px; padding:11px 13px;
+  cursor:pointer; font-size:13px; font-weight:600; color:var(--dim);
+  background:transparent; border:0; width:100%; text-align:left;
+  font:inherit; font-size:13px; font-weight:600;
+  transition:color var(--dur-fast) var(--ease-out);
+}
+.nk-ch:hover{color:var(--text)}
+.nk-ch .ico{width:15px; height:15px; color:var(--dim-2); flex:none}
+.nk-ch .nk-tag{
+  margin-left:auto; font-size:11px; font-weight:600; color:var(--dim-2);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:55%;
+}
+.nk-ch .nk-caret{
+  flex:none; width:10px; height:10px; opacity:.5;
+  transition:transform var(--dur-fast) var(--ease-out);
+}
+.nk-card.live .nk-ch{color:var(--text)}
+.nk-card.live .nk-ch .ico{color:var(--accent)}
+.nk-card.live .nk-ch .nk-tag{color:var(--accent)}
+/* v3.5.12: правило целилось в .nk-body — такого класса нет, карточки
+   «не сворачивались назад». Правильное имя тела — .nk-cbody */
+.nk-card.closed .nk-cbody{display:none}
+.nk-card.closed .nk-ch .nk-caret{transform:rotate(-90deg)}
+.nk-cbody{
+  padding:0 13px 13px; display:flex; flex-direction:column; gap:11px;
+  min-height:0;
+  /* раскрытая карточка не съедает всю колонку: своя прокрутка */
+  max-height:min(60vh, 560px); overflow-y:auto; scrollbar-width:thin;
+  overscroll-behavior:contain;
+}
+/* содержимое процесса — тёмный/светлый «колодец» внутри карточки */
+html[data-skin="nochnik"] .nk-cbody .panel,
+html[data-skin="creme"] .nk-cbody .panel{
+  padding:2px 1px 0; display:block; overflow:visible; min-height:0;
+}
+html[data-skin="nochnik"] .nk-cbody .subhead,
+html[data-skin="creme"] .nk-cbody .subhead{margin:14px 0 8px}
+html[data-skin="nochnik"] .nk-cbody .musiclist,
+html[data-skin="creme"] .nk-cbody .musiclist{max-height:34vh}
+html[data-skin="nochnik"] .nk-cbody #gamesGrid,
+html[data-skin="creme"] .nk-cbody #gamesGrid{
+  grid-template-columns:1fr 1fr;
+}
+html[data-skin="nochnik"] .nk-cbody .games-featured,
+html[data-skin="creme"] .nk-cbody .games-featured{
+  grid-template-columns:1fr; gap:8px;
+}
+html[data-skin="nochnik"] .nk-cbody .gamecard,
+html[data-skin="creme"] .nk-cbody .gamecard{
+  min-height:0; padding:12px; gap:3px;
+}
+html[data-skin="nochnik"] .nk-cbody .gameicon,
+html[data-skin="creme"] .nk-cbody .gameicon,
+html[data-skin="nochnik"] .nk-cbody .gameemoji,
+html[data-skin="creme"] .nk-cbody .gameemoji{
+  width:36px; height:36px; border-radius:9px; margin-bottom:5px;
+}
+html[data-skin="nochnik"] .nk-cbody .gameicon .ico,
+html[data-skin="creme"] .nk-cbody .gameicon .ico{font-size:18px}
+html[data-skin="nochnik"] .nk-cbody .gamecard .gamedesc,
+html[data-skin="creme"] .nk-cbody .gamecard .gamedesc{display:none}
+/* витрина файлов — сетка карточек (files.js рисует .filerow) */
+html[data-skin="nochnik"] #filesList,
+html[data-skin="creme"] #filesList{
+  display:grid; grid-template-columns:1fr 1fr; gap:7px;
+}
+html[data-skin="nochnik"] #filesList .filerow,
+html[data-skin="creme"] #filesList .filerow{
+  flex-direction:column; align-items:stretch; gap:7px; padding:10px;
+  border-radius:10px; border:1px solid var(--border);
+  background:var(--surface2); margin:0;
+}
+html[data-skin="nochnik"] #filesList .filerow:hover,
+html[data-skin="creme"] #filesList .filerow:hover{
+  border-color:var(--accent-border);
+}
+html[data-skin="nochnik"] #filesList .fico,
+html[data-skin="creme"] #filesList .fico{
+  width:30px; height:30px; border-radius:8px; background:var(--surface3);
+  color:var(--accent);
+}
+html[data-skin="nochnik"] #filesList .nm,
+html[data-skin="creme"] #filesList .nm{
+  font-size:12px; font-weight:600; color:var(--text);
+}
+html[data-skin="nochnik"] #filesList .sz,
+html[data-skin="creme"] #filesList .sz,
+html[data-skin="nochnik"] #filesList .fown,
+html[data-skin="creme"] #filesList .fown{
+  font-size:10.5px; color:var(--dim-2);
+}
+html[data-skin="nochnik"] #filesList .pbar,
+html[data-skin="creme"] #filesList .pbar,
+html[data-skin="nochnik"] #filesList .dlstat,
+html[data-skin="creme"] #filesList .dlstat{flex-basis:100% !important}
+
+/* участники голоса — волна говорящего */
+html[data-skin="nochnik"] .vperson,
+html[data-skin="creme"] .vperson{
+  background:transparent; border:0; border-radius:var(--radius-sm);
+  padding:7px 8px; margin-bottom:0; gap:9px;
+}
+html[data-skin="nochnik"] .vperson:hover,
+html[data-skin="creme"] .vperson:hover{background:var(--surface2)}
+html[data-skin="nochnik"] .vperson.spk,
+html[data-skin="creme"] .vperson.spk{
+  border:0; box-shadow:none; color:var(--text);
+}
+html[data-skin="nochnik"] .vperson .vava,
+html[data-skin="creme"] .vperson .vava{
+  width:26px; height:26px; border-radius:9px; font-size:10.5px;
+  background-size:cover; background-position:50%;
+}
+html[data-skin="nochnik"] .vperson.spk .vava,
+html[data-skin="creme"] .vperson.spk .vava{
+  animation:none; box-shadow:0 0 0 2px var(--accent);
+}
+/* волна: 4 палочки, оживают у говорящего (nochnik.js добавляет .nk-wave) */
+.nk-wave{display:flex; align-items:center; gap:2px; margin-left:auto;
+  height:13px; flex:none}
+.nk-wave i{
+  width:2.5px; background:var(--accent); border-radius:2px; height:3px;
+  opacity:.3; display:block;
+}
+.vperson.spk .nk-wave i{animation:nkTalk .9s infinite ease-in-out; opacity:1}
+.vperson.spk .nk-wave i:nth-child(2){animation-delay:.12s}
+.vperson.spk .nk-wave i:nth-child(3){animation-delay:.24s}
+.vperson.spk .nk-wave i:nth-child(4){animation-delay:.36s}
+@keyframes nkTalk{0%, 100%{height:3px} 50%{height:13px}}
+
+/* музыка: компактный «сейчас играет» */
+html[data-skin="nochnik"] .nk-cbody .music-now,
+html[data-skin="creme"] .nk-cbody .music-now{
+  background:transparent; border:0; padding:0; gap:11px;
+}
+html[data-skin="nochnik"] .nk-cbody .music-cover,
+html[data-skin="creme"] .nk-cbody .music-cover{
+  width:46px; height:46px; border-radius:10px;
+}
+html[data-skin="nochnik"] .nk-cbody .music-title,
+html[data-skin="creme"] .nk-cbody .music-title{font-size:13.5px;
+  font-weight:600; font-family:var(--font-display); letter-spacing:-.01em}
+html[data-skin="nochnik"] .nk-cbody .musicbar,
+html[data-skin="creme"] .nk-cbody .musicbar{height:3px; margin-top:9px}
+html[data-skin="nochnik"] .nk-cbody .music-ctl,
+html[data-skin="creme"] .nk-cbody .music-ctl{gap:6px; width:100%}
+html[data-skin="nochnik"] .nk-cbody .music-ctl button,
+html[data-skin="creme"] .nk-cbody .music-ctl button{
+  width:30px; height:30px; min-width:30px; border-radius:9px;
+  background:var(--surface2); border:1px solid var(--border);
+  color:var(--dim);
+}
+html[data-skin="nochnik"] .nk-cbody .music-ctl button:hover,
+html[data-skin="creme"] .nk-cbody .music-ctl button:hover{
+  background:var(--surface3); border-color:var(--border2); color:var(--text);
+  transform:none;
+}
+html[data-skin="nochnik"] .nk-cbody #btnMPlay,
+html[data-skin="creme"] .nk-cbody #btnMPlay{
+  background:var(--accent); border-color:var(--accent);
+  color:var(--on-accent);
+}
+html[data-skin="nochnik"] .nk-cbody #btnMPlay:hover,
+html[data-skin="creme"] .nk-cbody #btnMPlay:hover{background:var(--accent2)}
+html[data-skin="nochnik"] .nk-cbody .music-ctl input[type=range],
+html[data-skin="creme"] .nk-cbody .music-ctl input[type=range]{flex:1;
+  width:auto; min-width:60px}
+html[data-skin="nochnik"] .nk-cbody .mqrow,
+html[data-skin="creme"] .nk-cbody .mqrow{
+  background:transparent; border:0; padding:5px 6px; border-radius:7px;
+  font-size:12.5px;
+}
+html[data-skin="nochnik"] .nk-cbody .mqrow:hover,
+html[data-skin="creme"] .nk-cbody .mqrow:hover{background:var(--surface2)}
+html[data-skin="nochnik"] .nk-cbody .mrow,
+html[data-skin="creme"] .nk-cbody .mrow{padding:6px 6px}
+
+/* кнопки в карточках — призрачные */
+html[data-skin="nochnik"] .nk-cbody button.sec,
+html[data-skin="creme"] .nk-cbody button.sec,
+html[data-skin="nochnik"] .nk-cbody .filebtn,
+html[data-skin="creme"] .nk-cbody .filebtn{
+  background:transparent; border-color:var(--border); color:var(--dim);
+}
+html[data-skin="nochnik"] .nk-cbody button.sec:hover,
+html[data-skin="creme"] .nk-cbody button.sec:hover,
+html[data-skin="nochnik"] .nk-cbody .filebtn:hover,
+html[data-skin="creme"] .nk-cbody .filebtn:hover{
+  background:var(--surface2); color:var(--text); border-color:var(--border2);
+}
+html[data-skin="nochnik"] .nk-cbody button:not(.sec):not(.frdel):not(.nk-ch),
+html[data-skin="creme"] .nk-cbody button:not(.sec):not(.frdel):not(.nk-ch){
+  background:var(--accent); border-color:var(--accent); color:var(--on-accent);
+}
+html[data-skin="nochnik"] .nk-cbody button:not(.sec):not(.frdel):not(.nk-ch):hover,
+html[data-skin="creme"] .nk-cbody button:not(.sec):not(.frdel):not(.nk-ch):hover{
+  background:var(--accent2); border-color:var(--accent2);
+}
+
+/* колодец потока глубже фона (это и есть «свет из окна» вокруг) */
+html[data-skin="nochnik"] .nk-stream,
+html[data-skin="creme"] .nk-stream{background:var(--nk-well)}
+
+/* ───────────────────────── «хост уснул» ───────────────────────── */
+.nk-asleep{
+  position:fixed; inset:0; z-index:70; display:none; place-items:center;
+  background:rgba(4,10,14,.72);
+  backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+}
+html[data-skin="creme"] .nk-asleep{background:rgba(46,34,18,.55)}
+.nk-asleep.show{display:grid}
+.nk-asleep-box{
+  max-width:400px; margin:20px; padding:26px; text-align:center;
+  border:1px solid var(--border2); border-radius:var(--radius-lg);
+  background:var(--surface);
+}
+.nk-asleep-box .nk-lamp{width:36px; height:36px; margin:0 auto 14px;
+  display:block}
+.nk-asleep-box h2{
+  font-family:var(--font-display); font-size:20px; font-weight:600;
+  margin:0 0 7px; letter-spacing:-.02em; color:var(--text-strong);
+}
+.nk-asleep-box p{
+  margin:0 0 4px; font-size:13.5px; color:var(--dim); line-height:1.55;
+}
+.nk-asleep-box .nk-try{
+  font-size:12px; color:var(--dim-2); margin-top:10px;
+  font-variant-numeric:tabular-nums;
+}
+.nk-asleep-box button{
+  margin-top:16px; padding:9px 18px; border-radius:10px;
+  background:var(--accent); border-color:var(--accent);
+  color:var(--on-accent); font-weight:600;
+}
+.nk-asleep-box button:hover{background:var(--accent2)}
+.nk-asleep-box button.nk-quiet{
+  background:transparent; border:1px solid var(--border2); color:var(--dim);
+  margin-left:8px; font-weight:500;
+}
+.nk-asleep-box button.nk-quiet:hover{background:var(--surface2);
+  color:var(--text)}
+
+/* ───────────────────────── командная палитра (⌘K) ───────────────────── */
+html[data-skin="nochnik"] .frpal-wrap,
+html[data-skin="creme"] .frpal-wrap{background:rgba(4,10,14,.4);
+  backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px)}
+html[data-skin="creme"] .frpal-wrap{background:rgba(46,34,18,.3)}
+html[data-skin="nochnik"] .frpal,
+html[data-skin="creme"] .frpal{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45);
+  overflow:hidden; padding:0;
+}
+html[data-skin="nochnik"] .frpal-in,
+html[data-skin="creme"] .frpal-in{
+  border-bottom:1px solid var(--border); padding:13px 16px; gap:10px;
+}
+html[data-skin="nochnik"] .frpal-in input,
+html[data-skin="creme"] .frpal-in input{
+  background:transparent; border:0; padding:0; font-size:14.5px;
+  color:var(--text);
+}
+html[data-skin="nochnik"] .frpal-in input:focus,
+html[data-skin="creme"] .frpal-in input:focus{
+  border:0; box-shadow:none; background:transparent;
+}
+html[data-skin="nochnik"] .frpal-sec,
+html[data-skin="creme"] .frpal-sec{
+  font-family:var(--font-display); font-size:10.5px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--dim-2);
+  padding:10px 16px 4px;
+}
+html[data-skin="nochnik"] .frpal-item,
+html[data-skin="creme"] .frpal-item{
+  border-radius:8px; margin:1px 8px; padding:8px 9px; gap:10px;
+  color:var(--dim);
+}
+html[data-skin="nochnik"] .frpal-item .ico,
+html[data-skin="creme"] .frpal-item .ico{color:var(--dim-2); flex:none}
+html[data-skin="nochnik"] .frpal-item.act,
+html[data-skin="creme"] .frpal-item.act{
+  background:var(--accent-soft); color:var(--text);
+}
+html[data-skin="nochnik"] .frpal-item.act .ico,
+html[data-skin="creme"] .frpal-item.act .ico{color:var(--accent)}
+html[data-skin="nochnik"] .frpal-item .frpal-hint,
+html[data-skin="creme"] .frpal-item .frpal-hint{color:var(--dim-2);
+  font-size:11px}
+html[data-skin="nochnik"] .frpal-item.act .frpal-hint,
+html[data-skin="creme"] .frpal-item.act .frpal-hint{color:var(--accent)}
+html[data-skin="nochnik"] .frpal-foot,
+html[data-skin="creme"] .frpal-foot{
+  border-top:1px solid var(--border); color:var(--dim-2); font-size:11px;
+  padding:9px 16px; gap:14px;
+}
+html[data-skin="nochnik"] .frpal-empty,
+html[data-skin="creme"] .frpal-empty{color:var(--dim-2)}
+
+/* ───────────────────────── студия оформления ─────────────────────────
+   Панель классики продолжает работать (вся на темовых переменных);
+   здесь только посадка в язык скина. */
+html[data-skin="nochnik"] .ux-drawer,
+html[data-skin="creme"] .ux-drawer{
+  background:var(--surface); border-left:1px solid var(--border2);
+}
+html[data-skin="nochnik"] .uxcard,
+html[data-skin="creme"] .uxcard{
+  background:var(--surface2); border:1px solid var(--border);
+}
+html[data-skin="nochnik"] .uxseg,
+html[data-skin="creme"] .uxseg{background:var(--bg);
+  border:1px solid var(--border)}
+html[data-skin="nochnik"] .uxseg button.act,
+html[data-skin="creme"] .uxseg button.act{
+  background:var(--accent); color:var(--on-accent);
+}
+
+/* тосты/эмодзи/окно игры — наследуют переменные, правим только форму */
+html[data-skin="nochnik"] .toast,
+html[data-skin="creme"] .toast{border-radius:999px}
+html[data-skin="nochnik"] .epick,
+html[data-skin="creme"] .epick{background:var(--surface);
+  border:1px solid var(--border)}
+html[data-skin="nochnik"] .rpicker,
+html[data-skin="creme"] .rpicker{background:var(--surface);
+  border:1px solid var(--border)}
+html[data-skin="nochnik"] .jumppill,
+html[data-skin="creme"] .jumppill{background:var(--accent);
+  color:var(--on-accent); border:0}
+html[data-skin="nochnik"] .jumppill:hover,
+html[data-skin="creme"] .jumppill:hover{background:var(--accent2)}
+/* пилюля «вниз» над композером потока */
+html[data-skin="nochnik"] body.app-on .jumppill,
+html[data-skin="creme"] body.app-on .jumppill{bottom:86px}
+
+/* вход (до подключения): панель уже на темовых переменных — только воздух */
+html[data-skin="nochnik"] body:not(.app-on) main,
+html[data-skin="creme"] body:not(.app-on) main{padding-top:40px}
+html[data-skin="nochnik"] .brandhero h1,
+html[data-skin="creme"] .brandhero h1{font-family:var(--font-display);
+  letter-spacing:-.03em}
+
+/* пины: панель закреплённых — карточка в потоке */
+html[data-skin="nochnik"] .pinpanel,
+html[data-skin="creme"] .pinpanel{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); box-shadow:0 12px 38px rgba(0,0,0,.25);
+}
+html[data-skin="nochnik"] .pinrow,
+html[data-skin="creme"] .pinrow{border-radius:var(--radius-sm)}
+html[data-skin="nochnik"] .pinrow:hover,
+html[data-skin="creme"] .pinrow:hover{background:var(--surface2)}
+
+/* плотность (плагин) — в языке скина */
+html[data-skin="nochnik"][data-density="compact"] .nk-rooms,
+html[data-skin="creme"][data-density="compact"] .nk-rooms,
+html[data-skin="nochnik"][data-density="compact"] .nk-now,
+html[data-skin="creme"][data-density="compact"] .nk-now{padding:10px 8px}
+html[data-skin="nochnik"][data-density="compact"] .nk-stream > .panel,
+html[data-skin="creme"][data-density="compact"] .nk-stream > .panel{
+  padding:0 18px}
+html[data-skin="nochnik"][data-density="roomy"] .nk-stream > .panel,
+html[data-skin="creme"][data-density="roomy"] .nk-stream > .panel{
+  padding:0 34px}
+html[data-skin="nochnik"][data-density="roomy"] .nk-rooms,
+html[data-skin="creme"][data-density="roomy"] .nk-rooms,
+html[data-skin="nochnik"][data-density="roomy"] .nk-now,
+html[data-skin="creme"][data-density="roomy"] .nk-now{padding:20px 16px}
+/* сетка/точки фона — видимы сквозь колодец только чуть-чуть */
+html[data-skin="nochnik"] .nk,
+html[data-skin="creme"] .nk{position:relative; inset:auto; height:100%}
+html[data-skin="nochnik"] body.app-on #app,
+html[data-skin="creme"] body.app-on #app{display:flex; flex-direction:column}
+html[data-skin="nochnik"] .nk{flex:1; min-height:0}
+
+/* ───────────────────────── адаптив ───────────────────────── */
+/* ≤1180: колонка «Сейчас» уезжает в шторку справа */
+@media (max-width:1180px){
+  html[data-skin="nochnik"] .nk,
+  html[data-skin="creme"] .nk{
+    grid-template-columns:var(--nk-rooms-w, 264px) minmax(0, 1fr);
+    grid-template-areas:"rooms stream";
+  }
+  html[data-skin="nochnik"] .nk-now,
+  html[data-skin="creme"] .nk-now{
+    display:none; position:fixed; right:0; top:0; bottom:0; z-index:60;
+    width:min(var(--nk-now-w, 320px), 88vw); background:var(--surface);
+    box-shadow:-18px 0 44px rgba(0,0,0,.4); padding:16px 14px;
+  }
+  html[data-skin="nochnik"] .nk-now.peek,
+  html[data-skin="creme"] .nk-now.peek{display:flex}
+}
+/* ≤820: комнаты — шторка слева; ⌘К-строка сжимается до иконки */
+@media (max-width:820px){
+  html[data-skin="nochnik"] .nk,
+  html[data-skin="creme"] .nk{
+    grid-template-columns:minmax(0, 1fr);
+    grid-template-areas:"stream";
+  }
+  html[data-skin="nochnik"] .nk-rooms,
+  html[data-skin="creme"] .nk-rooms{
+    display:none; position:fixed; left:0; top:0; bottom:0; z-index:60;
+    width:min(var(--nk-rooms-w, 272px), 84vw); background:var(--surface);
+    box-shadow:18px 0 44px rgba(0,0,0,.4); padding:16px 12px;
+  }
+  html[data-skin="nochnik"] .nk-rooms.peek,
+  html[data-skin="creme"] .nk-rooms.peek{display:flex}
+  html[data-skin="nochnik"] #hostInfo,
+  html[data-skin="creme"] #hostInfo{display:none}
+  html[data-skin="nochnik"] #online,
+  html[data-skin="creme"] #online{display:none}
+  html[data-skin="nochnik"] .nk-kbar-t,
+  html[data-skin="creme"] .nk-kbar-t,
+  html[data-skin="nochnik"] #btnPalette .nk-kbd,
+  html[data-skin="creme"] #btnPalette .nk-kbd{display:none}
+  html[data-skin="nochnik"] #btnPalette,
+  html[data-skin="creme"] #btnPalette{flex:0 0 34px; max-width:34px;
+    padding:8px; justify-content:center}
+}
+/* шторочные кнопки — видны только на узких экранах */
+.nk-toggle{display:none}
+@media (max-width:1180px){
+  .nk-toggle.nk-t-now{display:inline-flex}
+}
+@media (max-width:820px){
+  .nk-toggle.nk-t-rooms{display:inline-flex}
+}
+/* узкие экраны: место-панелям меньше бокового воздуха */
+@media (max-width:820px){
+  html[data-skin="nochnik"] .nk-stream > .panel,
+  html[data-skin="creme"] .nk-stream > .panel{padding:0 14px}
+}
+
+/* фокус-ринг как в её макете */
+html[data-skin="nochnik"] :focus-visible,
+html[data-skin="creme"] :focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+
+/* скроллбары скина — тоньше, под поверхность */
+html[data-skin="nochnik"] ::-webkit-scrollbar,
+html[data-skin="creme"] ::-webkit-scrollbar{width:9px; height:9px}
+html[data-skin="nochnik"] ::-webkit-scrollbar-thumb,
+html[data-skin="creme"] ::-webkit-scrollbar-thumb{
+  background:var(--scroll-thumb); border-radius:5px;
+  border:2px solid transparent; background-clip:padding-box;
+}
+html[data-skin="nochnik"] ::-webkit-scrollbar-track,
+html[data-skin="creme"] ::-webkit-scrollbar-track{background:transparent}
+
+
+
+/* ───────── v3.5.9.1: победы над ID-специфичностью классики ─────────
+   #tab-chat{position:relative} (для jumppill) сильнее классовых правил —
+   места в скине обязаны заполнять потокAbsolutely. */
+html[data-skin="nochnik"] #tab-chat,
+html[data-skin="nochnik"] #tab-dm,
+html[data-skin="nochnik"] #tab-profile,
+html[data-skin="nochnik"] #tab-chess,
+html[data-skin="creme"] #tab-chat,
+html[data-skin="creme"] #tab-dm,
+html[data-skin="creme"] #tab-profile,
+html[data-skin="creme"] #tab-chess{
+  position:absolute; inset:0; margin:0;
+}
+html[data-skin="nochnik"] #tab-profile,
+html[data-skin="creme"] #tab-profile{overflow-y:auto}
+html[data-skin="nochnik"] #tab-chat,
+html[data-skin="creme"] #tab-chat,
+html[data-skin="nochnik"] #tab-dm,
+html[data-skin="creme"] #tab-dm{overflow:hidden}
+
+/* строка ⌘K: честная ширина внутри .h-tools (beyond flex-collapse) */
+html[data-skin="nochnik"] header .h-tools #btnPalette,
+html[data-skin="creme"] header .h-tools #btnPalette{
+  flex:none; width:min(400px, 30vw); display:flex; align-items:center;
+  justify-content:flex-start; text-align:left;
+}
+
+/* содержимое карточки «Сейчас»: панель не должна схлопываться
+   (классика даёт .panel flex:1 — в auto-контейнере это высота 0) */
+html[data-skin="nochnik"] .nk-cbody .panel,
+html[data-skin="creme"] .nk-cbody .panel{
+  flex:none; flex-basis:auto; display:block; overflow:visible;
+}

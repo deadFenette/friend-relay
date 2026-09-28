@@ -1,0 +1,230 @@
+<!doctype html>
+<!-- 2048 (v2.0.5) — веб-игра лаунчера «Игры» (аналог «активити» в Discord):
+     самодостаточная страница, открывается веб-клиентом в <iframe sandbox>.
+     Общение с хостом — только через postMessage (мини-SDK, см. блок FR ниже):
+     fr_hello → хост отвечает fr_ctx (кто подключился), fr_toast/fr_close.
+     Рекорд хранится в localStorage этого origin (ключ wr_2048_best). -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1,
+      user-scalable=no">
+<title>2048 — Friend Relay</title>
+<style>
+  :root{
+    --bg:#0e1016; --surface:#171a23; --surface2:#1f2330; --border:#2a2f3f;
+    --text:#eef0f6; --dim:#8b93a7; --accent:#6366f1; --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:12px; padding:14px;
+    touch-action:none; user-select:none;
+  }
+  header{display:flex; align-items:center; gap:14px; width:100%;
+    max-width:420px;}
+  h1{font-size:34px; margin:0; background:linear-gradient(135deg,#6366f1,#a855f7);
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .scorebox{margin-left:auto; display:flex; gap:8px;}
+  .sc{background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:4px 12px; text-align:center; min-width:72px;}
+  .sc b{display:block; font-size:17px;}
+  .sc span{font-size:11px; color:var(--dim); text-transform:uppercase;}
+  #grid{
+    width:100%; max-width:420px; aspect-ratio:1; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--radius);
+    padding:8px; display:grid; grid-template:repeat(4,1fr)/repeat(4,1fr);
+    gap:8px; position:relative;
+  }
+  .cell{background:var(--surface2); border-radius:9px;}
+  .tile{
+    border-radius:9px; display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:clamp(18px,6vw,32px);
+    animation:pop .12s ease-out;
+  }
+  @keyframes pop{from{transform:scale(.6); opacity:.4;}}
+  .hint{color:var(--dim); font-size:13px; text-align:center;}
+  button{
+    background:var(--accent); color:#fff; border:0; border-radius:10px;
+    padding:9px 18px; font-weight:700; cursor:pointer; font-size:15px;
+  }
+  button.sec{background:var(--surface2); border:1px solid var(--border);
+    color:var(--text);}
+  #over{
+    position:absolute; inset:0; border-radius:var(--radius);
+    background:rgba(14,16,22,.86); display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>2048</h1>
+  <div class="scorebox">
+    <div class="sc"><span>счёт</span><b id="score">0</b></div>
+    <div class="sc"><span>рекорд</span><b id="best">0</b></div>
+  </div>
+</header>
+<div id="grid"></div>
+<div class="row" style="display:flex; gap:8px">
+  <button id="btnNew">↻ Новая игра</button>
+  <button class="sec" id="btnExit">Выйти в чат</button>
+</div>
+<div class="hint">Стрелки или свайпы — сдвинуть плитки. Одинаковые
+  складываются. Цель — 2048!</div>
+
+<script>
+"use strict";
+function $(id){ return document.getElementById(id); }
+
+/* ── мини-SDK (как Embedded App SDK в Discord) ─────────────────────────
+   Игра живёт в iframe и общается с хост-страницей ТОЛЬКО через postMessage:
+   1) при старте шлём fr_hello — хост ответит fr_ctx {name, token…};
+   2) fr_toast — показать всплывашку в хост-клиенте;
+   3) fr_close — попросить хост закрыть окно игры. */
+const FR = {name:""};
+window.parent.postMessage({type:"fr_hello"}, "*");
+window.addEventListener("message", (ev) => {
+  const d = ev.data || {};
+  if (d.type === "fr_ctx") FR.name = d.name || "";
+});
+function frClose(){ window.parent.postMessage({type:"fr_close"}, "*"); }
+$("btnExit").onclick = frClose;  /* «выйти в чат» — хост закрывает iframe */
+
+/* палитра плиток (классика 2048, приглушённая под тёмную тему) */
+const COLORS = {
+  2:"#3b4058", 4:"#444b6b", 8:"#5b5ff0", 16:"#7c5cf0", 32:"#9a55f0",
+  64:"#b849e8", 128:"#d943c8", 256:"#f0439e", 512:"#f0436e",
+  1024:"#f06243", 2048:"#f0a843",
+};
+
+let grid = [], score = 0, wonShown = false;
+const BEST_KEY = "wr_2048_best";
+let best = 0;
+try { best = +localStorage.getItem(BEST_KEY) || 0; } catch(e){}
+$("best").textContent = best;
+
+function newGame(){
+  grid = Array.from({length:4}, () => Array(4).fill(0));
+  score = 0; wonShown = false;
+  const o = $("over"); if (o) o.style.display = "none";
+  addTile(); addTile(); draw();
+}
+function addTile(){
+  const empty = [];
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++)
+    if (!grid[r][c]) empty.push([r, c]);
+  if (!empty.length) return;
+  const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+  grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+}
+function draw(won){
+  const g = $("grid");
+  g.innerHTML = "";
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++){
+    const v = grid[r][c];
+    const el = document.createElement("div");
+    if (v){
+      el.className = "tile";
+      el.style.background = COLORS[v] || "#f0c843";
+      el.style.color = v <= 4 ? "#eef0f6" : "#fff";
+      el.textContent = v;
+    } else el.className = "cell";
+    g.appendChild(el);
+  }
+  $("score").textContent = score;
+  if (score > best){
+    best = score;
+    try { localStorage.setItem(BEST_KEY, String(best)); } catch(e){}
+    $("best").textContent = best;
+  }
+  if (won && !wonShown){
+    wonShown = true;
+    frToast("2048: собрано 2048! 🏆");
+    showOver("🏆 2048! Ты смог, " + (FR.name || "игрок") + "!");
+  }
+}
+/* сжать строку влево; return {row, gained} */
+function slide(row){
+  const arr = row.filter(v => v);
+  let gained = 0;
+  for (let i = 0; i < arr.length - 1; i++){
+    if (arr[i] === arr[i + 1]){
+      arr[i] *= 2; gained += arr[i];
+      arr.splice(i + 1, 1);
+    }
+  }
+  while (arr.length < 4) arr.push(0);
+  return {row: arr, gained};
+}
+function move(dir){
+  /* dir: 0=лево, 1=право, 2=вверх, 3=вниз.
+     Для каждой из 4 линий собираем элементы в порядке «к краю движения»,
+     сжимаем и записываем обратно; anything changed → moved=true. */
+  let moved = false, gainedTotal = 0, won = false;
+  for (let i = 0; i < 4; i++){
+    const line = [];
+    for (let j = 0; j < 4; j++){
+      const rr = dir < 2 ? i : (dir === 2 ? j : 3 - j);
+      const cc = dir < 2 ? (dir === 0 ? j : 3 - j) : i;
+      line.push(grid[rr][cc]);
+    }
+    const res = slide(line);
+    gainedTotal += res.gained;
+    for (let j = 0; j < 4; j++){
+      const rr = dir < 2 ? i : (dir === 2 ? j : 3 - j);
+      const cc = dir < 2 ? (dir === 0 ? j : 3 - j) : i;
+      if (grid[rr][cc] !== res.row[j]) moved = true;
+      grid[rr][cc] = res.row[j];
+      if (res.row[j] === 2048) won = true;
+    }
+  }
+  if (!moved) return;
+  score += gainedTotal;
+  addTile();
+  draw(won);
+  if (isDead()) showOver("Ходов нет. Счёт: " + score);
+}
+function isDead(){
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++){
+    if (!grid[r][c]) return false;
+    if (c < 3 && grid[r][c] === grid[r][c + 1]) return false;
+    if (r < 3 && grid[r][c] === grid[r + 1][c]) return false;
+  }
+  return true;
+}
+function showOver(msg){
+  const box = $("over");
+  box.style.display = "flex";
+  box.innerHTML = "<b style='font-size:22px'></b>";
+  box.firstChild.textContent = msg;
+  const btn = document.createElement("button");
+  btn.textContent = "↻ Заново";
+  btn.onclick = newGame;
+  box.appendChild(btn);
+}
+
+$("btnNew").onclick = newGame;
+document.addEventListener("keydown", (e) => {
+  const map = {ArrowLeft:0, ArrowRight:1, ArrowUp:2, ArrowDown:3};
+  if (map[e.key] !== undefined){ e.preventDefault(); move(map[e.key]); }
+});
+/* свайпы (мобилки): порог 24px, по доминирующей оси */
+let tx = 0, ty = 0;
+document.addEventListener("touchstart", (e) => {
+  tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+}, {passive: true});
+document.addEventListener("touchend", (e) => {
+  const dx = e.changedTouches[0].clientX - tx;
+  const dy = e.changedTouches[0].clientY - ty;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 0) : (dy > 0 ? 3 : 2));
+}, {passive: true});
+
+newGame();
+</script>
+</body>
+</html>

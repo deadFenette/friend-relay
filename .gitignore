@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Сборка
+build/
+dist/
+*.spec
+
+# Данные релея (у каждого своя, в ~/.friend_relay)
+relay_data/
+*.db
+
+# Отладочные артефакты (больше НЕ коммитим — урок v3.4.1!)
+_dbg*.py
+_dbg*.log
+_t*.log
+_t*.txt
+_http_proto.log
+
+# IDE
+.idea/
+.vscode/

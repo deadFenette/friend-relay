@@ -1,0 +1,240 @@
+<!doctype html>
+<!-- Сапёр (v2.0.5) — веб-игра лаунчера «Игры» (аналог «активити» в Discord).
+     Самодостаточная страница для <iframe sandbox> веб-клиента; с хостом
+     общается только через postMessage (мини-SDK FR_*: fr_hello/fr_ctx,
+     fr_toast, fr_close). Рекорды по временям — в localStorage
+     (wr_mine_best_<сложность>). Флаги: правая кнопка или долгий тап. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1,
+      user-scalable=no">
+<title>Сапёр — Friend Relay</title>
+<style>
+  :root{
+    --bg:#0e1016; --surface:#171a23; --surface2:#1f2330; --border:#2a2f3f;
+    --text:#eef0f6; --dim:#8b93a7; --accent:#6366f1; --err:#f87171;
+    --ok:#34d399; --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:10px; padding:14px; user-select:none;
+  }
+  h1{margin:0; font-size:26px; background:linear-gradient(135deg,#6366f1,#a855f7);
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    justify-content:center;}
+  .bar b{font-variant-numeric:tabular-nums; min-width:64px; text-align:center;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:4px 10px;}
+  select, button{
+    background:var(--surface2); color:var(--text); border:1px solid var(--border);
+    border-radius:10px; padding:8px 14px; font-size:14px; cursor:pointer;
+  }
+  button.prim{background:var(--accent); border:0; color:#fff; font-weight:700;}
+  #board{
+    display:grid; gap:3px; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--radius); padding:8px;
+  }
+  .cellbox{
+    width:30px; height:30px; border-radius:6px; background:var(--surface2);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:15px; cursor:pointer;
+  }
+  .cellbox.small{width:24px; height:24px; font-size:13px;}
+  .cellbox.open{background:#12141c; cursor:default; border:1px solid #1c202e;}
+  .cellbox.boom{background:var(--err);}
+  .n1{color:#8fb7ff}.n2{color:#7ee2a8}.n3{color:#ff9b9b}.n4{color:#c39bff}
+  .n5{color:#f2c14e}.n6{color:#5fd7d7}.n7{color:#eef0f6}.n8{color:#8b93a7}
+  .hint{color:var(--dim); font-size:13px; text-align:center; max-width:520px;}
+</style>
+</head>
+<body>
+<h1>💣 Сапёр</h1>
+<div class="bar">
+  <select id="diff">
+    <option value="easy">Новичок 9×9 · 10 мин</option>
+    <option value="medium">Любитель 16×16 · 40 мин</option>
+    <option value="hard">Профи 16×30 · 99 мин</option>
+  </select>
+  <b id="mines">10</b>
+  <button class="prim" id="btnNew">↻ Заново</button>
+  <button id="btnExit">Выйти в чат</button>
+  <b id="time">0 с</b>
+</div>
+<div id="board"></div>
+<div class="hint">Клик — открыть клетку, правая кнопка (или долгий тап) —
+  флажок. Открой все клетки без мин. Рекорды времени — по каждой сложности.</div>
+
+<script>
+"use strict";
+function $(id){ return document.getElementById(id); }
+
+/* ── мини-SDK (как Embedded App SDK в Discord) ───────────────────────── */
+const FR = {name:""};
+window.parent.postMessage({type:"fr_hello"}, "*");
+window.addEventListener("message", (ev) => {
+  const d = ev.data || {};
+  if (d.type === "fr_ctx") FR.name = d.name || "";
+});
+function frClose(){ window.parent.postMessage({type:"fr_close"}, "*"); }
+function frToast(msg){
+  window.parent.postMessage({type:"fr_toast", text:String(msg).slice(0,120)}, "*");
+}
+$("btnExit").onclick = frClose;
+
+const DIFF = {
+  easy:   {rows: 9,  cols: 9,  mines: 10},
+  medium: {rows: 16, cols: 16, mines: 40},
+  hard:   {rows: 16, cols: 30, mines: 99},
+};
+let rows = 9, cols = 9, mines = 10;
+let board = [], open = [], flag = [], placed = false, dead = false, won = false;
+let openedCount = 0, t0 = 0, timerId = null;
+
+/* расстановка мин после ПЕРВОГО клика: первое открытие всегда безопасно
+   (классическое правило сапёра — иначе обидно проиграть на первом ходу) */
+function placeMines(sr, sc){
+  let n = mines;
+  while (n > 0){
+    const r = Math.floor(Math.random() * rows);
+    const c = Math.floor(Math.random() * cols);
+    if (board[r][c]) continue;
+    if (Math.abs(r - sr) <= 1 && Math.abs(c - sc) <= 1) continue;  /* вокруг клика */
+    board[r][c] = true;
+    n--;
+  }
+}
+function neighbors(r, c){
+  const out = [];
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++){
+    if (!dr && !dc) continue;
+    const rr = r + dr, cc = c + dc;
+    if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) out.push([rr, cc]);
+  }
+  return out;
+}
+function countAround(r, c){
+  return neighbors(r, c).filter(([rr, cc]) => board[rr][cc]).length;
+}
+function newGame(){
+  const d = DIFF[$("diff").value];
+  rows = d.rows; cols = d.cols; mines = d.mines;
+  board = Array.from({length: rows}, () => Array(cols).fill(false));
+  open  = Array.from({length: rows}, () => Array(cols).fill(false));
+  flag  = Array.from({length: rows}, () => Array(cols).fill(false));
+  placed = false; dead = false; won = false; openedCount = 0;
+  clearInterval(timerId);
+  $("time").textContent = "0 с";
+  $("mines").textContent = mines;
+  buildGrid();
+}
+function buildGrid(){
+  const b = $("board");
+  b.innerHTML = "";
+  b.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+  const small = cols > 12;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){
+    const el = document.createElement("div");
+    el.className = "cellbox" + (small ? " small" : "");
+    el.dataset.r = r; el.dataset.c = c;
+    el.addEventListener("click", () => reveal(r, c));
+    el.addEventListener("contextmenu", (e) => { e.preventDefault(); toggleFlag(r, c); });
+    el.addEventListener("touchstart", startLongPress(r, c), {passive: true});
+    el.addEventListener("touchend", cancelLongPress, {passive: true});
+    el.addEventListener("touchmove", cancelLongPress, {passive: true});
+    b.appendChild(el);
+  }
+}
+/* долгий тап = флажок (на телефоне правой кнопки нет) */
+let lpTimer = null, lpFired = false;
+function startLongPress(r, c){
+  return () => {
+    lpFired = false;
+    lpTimer = setTimeout(() => { lpFired = true; toggleFlag(r, c); }, 450);
+  };
+}
+function cancelLongPress(){
+  if (lpTimer){ clearTimeout(lpTimer); lpTimer = null; }
+}
+function cellEl(r, c){
+  return $("board").children[r * cols + c];
+}
+function drawCell(r, c){
+  const el = cellEl(r, c);
+  el.classList.toggle("open", open[r][c]);
+  if (open[r][c]){
+    const n = countAround(r, c);
+    el.textContent = board[r][c] ? "💥" : (n ? n : "");
+    if (n) el.classList.add("n" + n);
+    if (board[r][c] && dead) el.classList.add("boom");
+  } else if (flag[r][c]){
+    el.textContent = "🚩";
+  } else {
+    el.textContent = "";
+  }
+}
+function reveal(r, c){
+  if (dead || won || open[r][c] || flag[r][c]) return;
+  if (!placed){
+    placed = true;
+    placeMines(r, c);
+    t0 = Date.now();
+    timerId = setInterval(() => {
+      $("time").textContent = Math.floor((Date.now() - t0) / 1000) + " с";
+    }, 500);
+  }
+  if (board[r][c]){ boom(r, c); return; }
+  /* заливка открытых пустых клеток (как в классике) */
+  const stack = [[r, c]];
+  while (stack.length){
+    const [rr, cc] = stack.pop();
+    if (open[rr][cc] || flag[rr][cc]) continue;
+    open[rr][cc] = true;
+    openedCount++;
+    drawCell(rr, cc);
+    if (countAround(rr, cc) === 0 && !board[rr][cc])
+      for (const [nr, nc] of neighbors(rr, cc)) stack.push([nr, nc]);
+  }
+  checkWin();
+}
+function toggleFlag(r, c){
+  if (dead || won || open[r][c]) return;
+  flag[r][c] = !flag[r][c];
+  $("mines").textContent = Math.max(0, mines - flag.flat().filter(Boolean).length);
+  drawCell(r, c);
+}
+function boom(r, c){
+  dead = true;
+  clearInterval(timerId);
+  for (let rr = 0; rr < rows; rr++) for (let cc = 0; cc < cols; cc++)
+    if (board[rr][cc]){ open[rr][cc] = true; drawCell(rr, cc); }
+  frToast("Сапёр: бум! 💥 Попробуй ещё");
+}
+function checkWin(){
+  const total = rows * cols - mines;
+  if (openedCount < total) return;
+  won = true;
+  clearInterval(timerId);
+  const secs = Math.floor((Date.now() - t0) / 1000);
+  frToast("Сапёр: поле зачищено за " + secs + " с! 🏆");
+  /* рекорд времени по сложности (меньше — лучше) */
+  const key = "wr_mine_best_" + $("diff").value;
+  try {
+    const old = +localStorage.getItem(key) || 0;
+    if (!old || secs < old){
+      localStorage.setItem(key, String(secs));
+      setTimeout(() => alert(
+        "Новый рекорд: " + secs + " с!"), 50);
+    }
+  } catch(e){}
+}
+$("btnNew").onclick = newGame;
+$("diff").onchange = newGame;
+newGame();
+</script>
+</body>
+</html>
