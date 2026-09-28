@@ -74,6 +74,9 @@ html[data-skin="nochnik"]:not([data-theme]){
   --thumb-shadow:0 2px 8px rgba(240,169,59,.4);
   --logo-shadow:0 4px 14px rgba(240,169,59,.2);
   color-scheme:dark;
+  /* v3.6.8: лайтбокс скриншотов — свой глубокий оттенок вместо
+     дефолтного тёмного (в тон «ночной лампы») */
+  --lb-backdrop:rgba(7,16,21,.9);
 }
 /* ── палитра «Крем-брюле» по умолчанию (светлая, вино на сливках) ── */
 html[data-skin="creme"]:not([data-theme]){
@@ -96,6 +99,8 @@ html[data-skin="creme"]:not([data-theme]){
   --thumb-shadow:0 2px 8px rgba(179,58,70,.35);
   --logo-shadow:0 4px 14px rgba(179,58,70,.2);
   color-scheme:light;
+  /* v3.6.8: лайтбокс — светлый оверлей в тон сливок (не чёрная простыня) */
+  --lb-backdrop:rgba(246,239,225,.92);
 }
 
 /* лампа и рёбра заменяют классическое лого и точку-статус */

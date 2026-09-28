@@ -205,6 +205,9 @@ function dmAddBubble(o){
       meta2.textContent = fmtSize(o.text.size) +
         (o.text.sha256 ? " · sha256 ok" : "");
       txt.appendChild(meta2);
+      /* v3.6.8: картинки в ЛС — превью + лайтбокс (качается через
+         /dm_download — приватный маршрут) */
+      attachImagePreview(txt, o.text, true);
     } else {
       /* v2.0.3: тот же мини-маркдаун, что в общем чате */
       renderMsgMarkdown(txt, o.text);

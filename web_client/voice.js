@@ -57,6 +57,11 @@ var VC = {
   oddOut: 0,             // кадры, отвергнутые микшером по размеру
   sentFrames: 0, recvFrames: 0,    // наши счётчики 20мс-кадров
   lastIn: null, lastOut: null, lastSent: null, lastRecv: null, // снапшоты
+  /* v3.6.8 (проверки веба): сторож тишины микрофона. Если с момента
+     подключения микрофон НЕ издал ни звука (метр на нуле) — один раз
+     подскажем, что собеседник тебя точно не слышит. */
+  micVoiceSeen: false,   // был ли хоть один живой кадр с микрофона
+  micHintShown: false,   // подсказку «микрофон молчит» уже показали
 };
 
 function voiceWarn(msg){ $("voiceWarn").textContent = msg || ""; }
@@ -645,6 +650,8 @@ async function voiceStarted(){
   } catch(e){ ok = false; }
   if (!ok) startLegacyAudio();  // старый браузер — ScriptProcessor
   VC.lastUnderAt = Date.now();  /* не даём сжать буфер сразу после старта */
+  VC.startedAt = Date.now();    /* v3.6.8: точка отсчёта сторожа тишины */
+  VC.micVoiceSeen = false; VC.micHintShown = false;   /* новая сессия */
   // v3.4.1: сбрасываем reconnect counter (успешно зашли!) и стартуем HB.
   VC.reconnectAttempts = 0;
   if (VC.reconnectTimer){ clearTimeout(VC.reconnectTimer); VC.reconnectTimer = null; }
@@ -694,6 +701,21 @@ function startLegacyAudio(){
 }
 function voiceTick(){
   if (!VC.on) return;
+  const stat = $("voiceStat");
+  /* v3.6.8 ПРОВЕРКА 1 — автоплей-политика. Контекст может остаться
+     suspended: подключение без клика (автореконнект после пробуждения
+     вкладки, возврат из фоновой вкладки по восстановлению сети).
+     Плейаут при этом МОЛЧИТ, хотя кадры от собеседника идут, и
+     человек видит «подключено» без звука. Пробуем разбудить; не
+     удалось — честно говорим, что нужен клик по странице. */
+  if (VC.ctx && VC.ctx.state === "suspended"){
+    try { VC.ctx.resume(); } catch(e){}
+    if (VC.ctx.state === "suspended"){
+      stat.textContent = "звук заблокирован браузером — кликни по странице";
+      stat.style.color = "var(--warn)";
+      return;
+    }
+  }
   /* стабильно >10с — медленно сжимаем буфер (минимум 60мс) */
   if (Date.now() - VC.lastUnderAt > 10000 && VC.jitterTarget > 3){
     VC.jitterTarget--;
@@ -706,7 +728,6 @@ function voiceTick(){
   /* v3.6.6 (R4): строка качества — пинг/потери ↑↓ с цветом вердикта
      (те же пороги, что в Qt-клиенте). Пока первый pong не пришёл —
      без цифр, не пугаем «0 мс» в первые секунды. */
-  const stat = $("voiceStat");
   let text = "подключено · " + (VC.ctx ? VC.ctx.sampleRate : "?") + " Гц";
   const verdict = qualityVerdict();
   if (verdict !== "measuring"){
@@ -724,6 +745,18 @@ function voiceTick(){
      (палитра скина через CSS-переменные — работает во всех темах). */
   stat.style.color = verdict === "good" ? "var(--ok)"
     : verdict === "bad" ? "var(--err)" : "var(--warn)";
+  /* v3.6.8 ПРОВЕРКА 2 — «микрофон молчит». Ровно ОДИН раз за сессию,
+     если за 30 секунд подключения метр ни разу не шевельнулся: при
+     мёртвом/выбранном-не-том устройстве человек говорит, а собеседник
+     не слышит НИЧЕГО — из веба это никак не видно. Формулировка
+     спокойная: паузы в разговоре — норма. */
+  if (!VC.micHintShown && !VC.muted && Date.now() - VC.startedAt > 30000
+      && !VC.micVoiceSeen){
+    VC.micHintShown = true;
+    voiceWarn("микрофон пока молчал — если ты говорил, а друг не слышит, " +
+      "проверь выбор устройства выше (кнопка «Проверить микрофон» " +
+      "запишет и проиграет твой голос)");
+  }
 }
 function pushSamples(samples){
   /* своя индикация «говорит» — гистерезис ~250мс, как в Qt-клиенте */
@@ -733,6 +766,9 @@ function pushSamples(samples){
   if (!VC.muted && rms > 300){
     VC.mySil = 0;
     if (!VC.mySpeak){ VC.mySpeak = true; renderVoicePeople(); }
+    /* v3.6.8: живой голос с микрофона виден — сторож тишины отбой */
+    VC.micVoiceSeen = true;
+    if (VC.micHintShown){ VC.micHintShown = false; voiceWarn(""); }
   } else if (++VC.mySil >= 15 && VC.mySpeak){
     VC.mySpeak = false; renderVoicePeople();
   }
@@ -873,6 +909,8 @@ function disconnectVoice(){
      после переподключения канал навсегда начинал с двойной задержки). */
   VC.jitterTarget = 4; VC.speak = {}; VC.mySpeak = false; VC.mySil = 0;
   VC.wsGoneAt = 0; VC.lastInboundAt = 0;   /* v3.5.5: liveness-часы тоже */
+  /* v3.6.8: сторож тишины микрофона — на новую сессию заново */
+  VC.micVoiceSeen = false; VC.micHintShown = false;
   setMicMeter(0);
   voiceBtn("btnVoice", "voice", "Подключиться");
   $("btnVoiceMute").classList.add("hidden");

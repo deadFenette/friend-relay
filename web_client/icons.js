@@ -132,6 +132,18 @@ const SPRITE = `<svg aria-hidden="true" style="position:absolute;width:0;height:
   <line x1="6" y1="6" x2="18" y2="18"/>
   <line x1="18" y1="6" x2="6" y2="18"/>
 </symbol>
+<!-- v3.6.8: зум лайтбокса скриншотов (images.js) -->
+<symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="11" cy="11" r="7"/>
+  <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+  <line x1="8" y1="11" x2="14" y2="11"/>
+  <line x1="11" y1="8" x2="11" y2="14"/>
+</symbol>
+<symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="11" cy="11" r="7"/>
+  <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+  <line x1="8" y1="11" x2="14" y2="11"/>
+</symbol>
 <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
   <polyline points="21,4 21,10 15,10"/>
   <path d="M3.5 12a8 8 0 0 1 14-5.3L21 10"/>

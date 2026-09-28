@@ -476,6 +476,9 @@ function addBubble(o){
       meta2.textContent = fmtSize(o.text.size) +
         (o.text.sha256 ? " · sha256 ok" : "");
       txt.appendChild(meta2);
+      /* v3.6.8: скриншоты и картинки — превью в бабле, клик открывает
+         лайтбокс поверх чата (см. images.js) */
+      attachImagePreview(txt, o.text, false);
     } else {
       /* v2.0.3: мини-маркдаун вместо голого textContent — тот же
          набор разметки, что в Qt (renderMsgMarkdown безопасен: esc ДО разметки) */

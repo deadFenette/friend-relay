@@ -131,6 +131,10 @@
       <div id="feed"></div>
       <div id="composer">
         <button id="btnEmoji" title="Эмодзи" type="button" data-i="emoji"></button>
+        <!-- v3.6.8: скриншот/картинка прямо из чата (Ctrl+V тоже работает:
+             см. images.js). Несколько файлов за раз — accept="image/*" -->
+        <button id="btnImg" title="Скриншот или картинка (можно Ctrl+V)" type="button" data-i="attach"></button>
+        <input type="file" id="imgInput" accept="image/*" multiple hidden>
         <input id="msgText" placeholder="Напиши сообщение…" maxlength="4000">
         <button id="btnSend" title="Отправить (Enter)" data-i="send"></button>
       </div>
@@ -499,6 +503,8 @@
 <script src="/static/chess.js"></script>
 <script src="/static/games.js"></script>
 <script src="/static/voice.js"></script>
+<!-- v3.6.8: скриншоты и картинки в чате — превью + лайтбокс -->
+<script src="/static/images.js"></script>
 <script src="/static/music.js"></script>
 <!-- v3.6.0: демонстрация экрана (до appearance/nochnik — им нужен DOM панели) -->
 <script src="/static/screen.js"></script>
