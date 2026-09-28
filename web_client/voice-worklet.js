@@ -13,7 +13,15 @@ class VcCap extends AudioWorkletProcessor {
   process(inputs){
     const ch = inputs[0] && inputs[0][0];
     if (ch){
-      this.b.push(ch); this.n += ch.length;
+      /* v3.6.7 ФИКС «БУРУНДУКА»: копируем чанк СРАЗУ (new Float32Array).
+         По спеке AudioWorklet массив inputs валиден ТОЛЬКО внутри текущего
+         process(): Chrome переиспользует ту же память под следующий рендер.
+         Раньше мы копили ССЫЛКИ и копировали позже, при флеше батча —
+         к этому моменту все накопленные чанки показывали ОДИН И ТОТ ЖЕ
+         (самый свежий) кусок: собеседник слышал 128 сэмплов, повторённые
+         8 раз — жужжащий «бурундук» вместо голоса. Проверено в Chromium:
+         dup_ratio 0.875 (7 из 8 чанков идентичны) -> 0 после фикса. */
+      this.b.push(new Float32Array(ch)); this.n += ch.length;
       if (this.n >= 960){
         const o = new Float32Array(this.n);
         let k = 0;

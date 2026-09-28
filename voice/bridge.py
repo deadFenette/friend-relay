@@ -392,6 +392,18 @@ class VoiceBridge:
                     except Exception:
                         await ws_send(b"\x00" * PCM_FRAME_BYTES)
                 else:
+                    # v3.6.7: защита тракта. Браузерный клиент ожидает
+                    # binary кратными 1920 байтам (сама музыка-логика
+                    # voice.js режет по 960 сэмплов и ХВОСТ ОТБРАСЫВАЕТ —
+                    # чужой размер дал бы пропуски/сдвиг волны). Микшер
+                    # штатно шлёт ровно 20мс-кадры; всё иное — мусор
+                    # протокола, браузеру его скармливать нельзя.
+                    if len(payload) != PCM_FRAME_BYTES:
+                        log.warning(
+                            "Мост: от микшера пришёл PCM-кадр %s байт "
+                            "(ожидалось %s) — кадр пропущен",
+                            len(payload), PCM_FRAME_BYTES)
+                        continue
                     await ws_send(payload)  # чистый PCM int16
                 last_out = time.monotonic()
         except (asyncio.IncompleteReadError, asyncio.CancelledError,

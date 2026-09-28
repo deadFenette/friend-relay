@@ -434,9 +434,31 @@ async function connectVoice(){
         micConstraints(voiceSetting("wr_mic")));
       VC.devicesGranted = true;
     } catch(e){
-      voiceWarn("микрофон недоступен (" + (e.name || e) +
-        ") — разреши доступ к микрофону для этой страницы");
-      return;
+      /* v3.6.7: сохранённый deviceId мог протухнуть (устройство вынули,
+         USB-гарнитура переподключилась) — раньше это НАВСЕГДА ронило
+         подключение с «микрофон недоступен», хотя системный микрофон
+         жив. Сначала пробуем ДЕФОЛТНЫЙ микрофон, и только если и он
+         недоступен — сдаёмся с объяснением. */
+      const saved = voiceSetting("wr_mic");
+      if (saved){
+        try {
+          VC.stream = await navigator.mediaDevices.getUserMedia(
+            micConstraints(""));
+          VC.devicesGranted = true;
+          voiceSetting("wr_mic", "");   // сбрасываем протухший выбор
+          if ($("micSel")) $("micSel").value = "";
+          voiceWarn("выбранный микрофон недоступен — включён системный " +
+            "по умолчанию");
+        } catch(e2){
+          voiceWarn("микрофон недоступен (" + (e2.name || e2) +
+            ") — разреши доступ к микрофону для этой страницы");
+          return;
+        }
+      } else {
+        voiceWarn("микрофон недоступен (" + (e.name || e) +
+          ") — разреши доступ к микрофону для этой страницы");
+        return;
+      }
     }
     try { VC.ctx = new AudioContext({sampleRate:48000}); }
     catch(e){ VC.ctx = new AudioContext(); }
@@ -574,7 +596,10 @@ function resampleOut(f){
   for (let i = 0; i < n; i++){
     const p = i / ratio;
     const j = Math.floor(p), frac = p - j;
-    out[i] = f[j] * (1 - frac) + (j + 1 < 960 ? f[j + 1] * frac : 0);
+    /* v3.6.7: на краю кадра интерполировали В НОЛЬ (вместо соседнего
+       сэмпла) — крошечный провал волны на каждом 20мс-стыке на
+       контекстах 44.1к. Теперь край дублирует последний сэмпл. */
+    out[i] = f[j] * (1 - frac) + f[Math.min(j + 1, 959)] * frac;
   }
   return out;
 }
@@ -723,8 +748,10 @@ function pushSamples(samples){
     let pos = VC.resPos;
     for (let i = 0; i < n; i++){
       const j = Math.floor(pos), frac = pos - j;
+      /* v3.6.7: край батча дублирует последний сэмпл вместо
+         интерполяции в ноль (провал волны на каждом стыке) */
       out[i] = samples[j] * (1 - frac) +
-        (j + 1 < samples.length ? samples[j + 1] * frac : 0);
+        samples[Math.min(j + 1, samples.length - 1)] * frac;
       pos += ratio;
     }
     VC.resPos = Math.max(0, pos - samples.length);

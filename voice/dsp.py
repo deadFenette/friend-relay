@@ -90,6 +90,87 @@ class HighPass:
         self._prev_y = float(prev_y)
 
 
+class AutoLevel:
+    """Мягкая авторегуляция уровня микрофона (AGC-lite, v3.6.7).
+
+    ПРОБЛЕМА: VAD_THRESHOLD = 300 — АБСОЛЮТНЫЙ порог «это речь». Он
+    рассчитан на обычный микрофон (речь RMS ~2000-5000). Тихие микрофоны
+    (ноутбучные без системного усиления, USB-гарнитуры с низким gain)
+    дают речь RMS 50-300 — НИЖЕ порога: SoftGate не открывался, все кадры
+    уходили с флагом silence, и собеседник слышал ТИШИНУ, хотя человек
+    нормально говорил. Замер на реальном конвейере: речь RMS 150-250 →
+    0 кадров с audible-звуком у слушателя.
+
+    РЕШЕНИЕ: плавное усиление ТОЛЬКО тихих сигналов. Нормальные/громкие
+    микрофоны не трогаем (gain = 1) — их поведение не меняется.
+
+    Как выбирается gain:
+      - level каждого кадра сравнивается с «речеподобным» порогом
+        max(SPEAK_MIN_RMS, шумовой пол × FLOOR_RATIO). Шумовой пол —
+        min-tracking (вниз мгновенно, вверх очень медленно), речь пол
+        НЕ поднимает;
+      - на речеподобных кадрах ведётся огибающая речи (атака мгновенно,
+        спад ~10с): gain цель = TARGET_RMS / огибающая, потолок MAX_GAIN;
+      - в тишине gain медленно возвращается к 1 (усиленный шум всё равно
+        не уйдёт в сеть — гейт закрыт), а огибающая затухает;
+      - gain НИКОГДА не ослабляет сигнал (минимум 1.0) — перегруз громкого
+        микрофона лечится системным уровнем, а не нам.
+
+    Порядок цепочки: HighPass → AutoLevel → SoftGate. AGC обязан стоять
+    ДО гейта: он возвращает уровень речи выше порога, гейт и VAD работают
+    как задумано, а усиленный шум гейтится относительно своего пола.
+    """
+
+    TARGET_RMS = 3000.0    # к такому уровню речи тянемся (диапазон 2000-5000)
+    MAX_GAIN = 32.0        # +30 дБ — потолок усиления
+    SPEAK_MIN_RMS = 80.0   # ниже этого «речеподобного» порога речь не бывает
+    FLOOR_RATIO = 6.0      # речь = шум × 6 и выше (≈ +15 дБ SNR)
+    FLOOR_RISE = 0.003     # пол шума вверх очень медленно (~5с постоянная)
+    ENV_DECAY = 0.998      # спад огибающей речи (~10с до 1/e)
+    GAIN_UP = 0.03         # скорость подъёма gain на речеподобных кадрах
+    GAIN_IDLE = 0.01       # скорость возврата к 1 в тишине
+
+    def __init__(self) -> None:
+        self._floor = 0.0   # шумовой пол (RMS, до усиления)
+        self._env = 0.0     # огибающая речи (RMS, до усиления)
+        self._gain = 1.0
+
+    @property
+    def gain(self) -> float:
+        """Текущее применяемое усиление (для UI/диагностики)."""
+        return self._gain
+
+    def process(self, samples) -> None:
+        """Применяет AGC к float32-массиву IN PLACE (один 20мс-кадр)."""
+        if not _HAS_NUMPY or samples.size == 0:
+            return
+        level = float(np.sqrt(np.mean(samples * samples)))
+
+        # ── шумовой пол и классификация кадра ──
+        speak_min = max(self.SPEAK_MIN_RMS, self._floor * self.FLOOR_RATIO)
+        speak_like = level >= speak_min
+        if level < self._floor:
+            self._floor = level        # вниз пол честный — мгновенно
+        elif not speak_like:
+            # вверх — медленно, РЕЧЬ пол не поднимает (иначе gain упадёт
+            # посреди фразы и слово «обрежется»)
+            self._floor += (level - self._floor) * self.FLOOR_RISE
+
+        # ── gain ──
+        if speak_like:
+            self._env = max(level, self._env * self.ENV_DECAY)
+            target = min(self.MAX_GAIN,
+                         self.TARGET_RMS / max(self._env, 1.0))
+            target = max(1.0, target)  # никогда не ослабляем
+            self._gain += (target - self._gain) * self.GAIN_UP
+        else:
+            self._env *= self.ENV_DECAY
+            self._gain += (1.0 - self._gain) * self.GAIN_IDLE
+
+        if self._gain > 1.0:
+            samples *= self._gain
+
+
 class SoftGate:
     """Адаптивный шумовой гейт с плавной атакой/спадом.
 

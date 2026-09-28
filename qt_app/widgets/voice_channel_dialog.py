@@ -722,6 +722,16 @@ class VoiceChannelDialog(QDialog):
         # подсказки человек видел просто «не слышно».
         if q.get("odd_out", 0) > 0:
             text += "  ·  ⚠ твои кадры не принимаются — обнови программу"
+        # v3.6.7: АГС вышла на потолок усиления — микрофон ОЧЕНЬ тихий.
+        # Раньше такой микрофон просто «не слышно было» без объяснений.
+        try:
+            gain = float(self._voice.mic_gain())
+        except Exception:
+            gain = 1.0
+        if gain >= 24.0:
+            text += ("  ·  ⚠ микрофон очень тихий (усиление ×"
+                     f"{gain:.0f}) — подними уровень микрофона "
+                     "в системных настройках")
         self._quality_label.setText(text)
         self._quality_label.setStyleSheet(
             f"color: {color}; font-size: 11px;"

@@ -189,6 +189,19 @@ class VoiceClient:
         self._host_version = ""
         self._odd_out = 0
         self.on_version_mismatch: Callable[[str, str], None] | None = None
+        # ── v3.6.7 ФИКС «НЕ СЛЫШНО» #1: АККУМУЛЯТОР ЗАХВАТА ──────────
+        # blocksize у PortAudio — только ХИНТ: ALSA/PulseAudio и часть
+        # драйверов Windows отдают колбэки произвольного размера
+        # (240/480/1024 сэмплов...). Раньше блок уходил в сеть ОДНИМ
+        # FRVC-кадром, а микшер принимает строго 1920 байта (20мс/48к):
+        # всё прочее считалось «odd» и ОТБРАСЫВАЛОСЬ — у собеседника
+        # ПОЛНАЯ тишина при живом соединении. Теперь байты микрофона
+        # копятся и режутся строго по 20мс-кадрам независимо от того,
+        # какими кусками их приносит PortAudio (симметрично веб-клиенту
+        # (VC.pend) и плейауту (_tail)).
+        self._cap_pending = bytearray()
+        self._cap_lock = threading.Lock()
+        self._cap_overruns = 0  # байт выброшено при переполнении накопителя
 
     # ── Публичный API ───────────────────────────────────────────────
 
@@ -240,6 +253,9 @@ class VoiceClient:
         with self._send_q_lock:
             self._ctl_q.clear()
             self._audio_q.clear()
+        with self._cap_lock:
+            self._cap_pending.clear()  # v3.6.7: хвост прошлого захвата не нужен
+        self._cap_overruns = 0
         self._send_dropped = 0
         self._send_activity.clear()
         self._host_version = ""
@@ -324,6 +340,10 @@ class VoiceClient:
             "send_dropped": self._send_dropped,
             "send_queued": len(self._audio_q),
             "playback_target": self._playback.target_frames(),
+            # v3.6.7: диагностика захвата — усиление АГС и переполнения
+            # аккумулятора (не 0 при живом захвате = тормозит PortAudio)
+            "mic_gain": round(self.mic_gain(), 2),
+            "cap_overruns": self._cap_overruns,
         }
 
     # ── Качество связи (v3.5.7) ──────────────────────────────────
@@ -568,6 +588,14 @@ class VoiceClient:
     def is_noise_suppression(self) -> bool:
         return self._noise_suppression
 
+    def mic_gain(self) -> float:
+        """Текущее усиление АГС микрофона (v3.6.7): 1.0 = не усиливаем.
+        Значения близкие к потолку (32) — микрофон ОЧЕНЬ тихий, стоит
+        поднять усиление в системных настройках."""
+        if self._mic is not None:
+            return self._mic.agc_gain
+        return 1.0
+
     def restart_streams(self) -> bool:
         """Перезапускает аудио-потоки на живом соединении (смена
         устройств). Возвращает True если потоки подняты. Сетевая часть
@@ -674,19 +702,44 @@ class VoiceClient:
 
     def _audio_in_callback(self, indata, frames, time_info, status) -> None:
         """Вызывается sounddevice'ом с новым блоком PCM с микрофона.
-        Шумоподавление (high-pass + плавный гейт), VAD, свой индикатор
-        «говорит», кодирование opus при согласовании — см. capture.py.
+
+        v3.6.7: blocksize у PortAudio — ХИНТ, а не гарантия: ALSA/Pulse
+        и часть драйверов дают блоки произвольного размера. Раньше блок
+        уходил ОДНИМ кадром, и микшер всё не-1920-байтное отбрасывал
+        (odd) — у собеседника тишина. Теперь блоки любого размера режутся
+        на строгие 20мс-кадры (см. _process_capture_frame).
         """
         if not self._running or self._sock is None:
             return
 
         raw_pcm = indata.reshape(-1).tobytes()
 
+        with self._cap_lock:
+            self._cap_pending.extend(raw_pcm)
+            while len(self._cap_pending) >= PCM_FRAME_BYTES:
+                frame_pcm = bytes(self._cap_pending[:PCM_FRAME_BYTES])
+                del self._cap_pending[:PCM_FRAME_BYTES]
+                self._process_capture_frame(frame_pcm)
+            # Страховка: захват без отправки (мертвый сокет, пауза) не
+            # должен копить память — хвост без полного кадра, максимум один.
+            if len(self._cap_pending) > PCM_FRAME_BYTES:
+                self._cap_overruns += len(self._cap_pending) - PCM_FRAME_BYTES
+                del self._cap_pending[PCM_FRAME_BYTES:]
+
+    def _process_capture_frame(self, pcm: bytes) -> None:
+        """РОВНО один 20мс-кадр микрофона (1920 байт): DSP, VAD, кодек,
+        очередь отправки. Зовётся только из _audio_in_callback (поток
+        PortAudio) — уже под _cap_lock; шумодав/VAD держат состояние
+        между кадрами, поэтому дробить/склеивать кадры здесь нельзя.
+        """
+        if not self._running or self._sock is None:
+            return
+
         # ── Шумоподавление (high-pass + плавный гейт) ─────────────
         if self._noise_suppression and self._mic is not None:
-            pcm, gate_gain = self._mic.process(raw_pcm)
+            pcm, gate_gain = self._mic.process(pcm)
         else:
-            pcm, gate_gain = raw_pcm, 1.0
+            pcm, gate_gain = pcm, 1.0
 
         level_rms = MicChain.rms_of(pcm)
         # VAD: с открытым гейтом тихий, но реальный звук идёт в сеть;
