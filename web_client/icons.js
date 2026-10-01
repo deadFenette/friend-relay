@@ -705,6 +705,8 @@ const CHROME_SELECTORS = [
   ".ux-foot button",
   ".ux-head button",
   ".howto summary",
+  /* v3.7.1: спойлер ключей на дружелюбном экране входа — иконка замка */
+  ".advkeys summary",
   ".gamewin-bar button",
   ".subhead",
   /* статичные .gameicon из featured-секции тоже подхватываем (data-i) */

@@ -99,6 +99,8 @@ def collet_probe(page) -> list[dict]:
 def connect_and_join_voice(page, name: str, port: int) -> None:
     page.goto(f"https://127.0.0.1:{port}/", wait_until="domcontentloaded")
     page.fill("#name", name)
+    # v3.7.1: ключи переехали в спойлер #advKeys (дружелюбный экран входа)
+    page.click("#advKeys summary")
     page.fill("#key", "k")
     page.click("#btnConnect")
     page.wait_for_selector("#app:not(.hidden)", timeout=15000)

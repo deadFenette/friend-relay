@@ -548,13 +548,22 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
 .subhead::after{content:"";flex:1;height:1px;background:var(--border)}
 .subhead .ico{font-size:13px;color:var(--dim)}
 
-/* ─────────────────────────── экран входа ─────────────────────────── */
+/* ─────────────────────────── экран входа ───────────────────────────
+   v3.7.1 «дружелюбный вход»: один обязательный шаг — имя (оно же рисует
+   мини-аватар). Ключи — в спойлере. Тихая появляющаяся анимация
+   (transform+opacity, уважает prefers-reduced-motion). */
 #connectPanel{
-  max-width:440px;margin:8vh auto 0;padding:32px 30px 26px;
+  max-width:460px;margin:7vh auto 0;padding:36px 34px 26px;
   background:var(--surface);
   border:1px solid var(--border);border-radius:var(--radius-lg);
   position:relative;
+  animation:gateIn .5s var(--ease) both;
 }
+@keyframes gateIn{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:none}
+}
+@media (prefers-reduced-motion:reduce){#connectPanel{animation:none}}
 /* тонкая акцентная линия сверху — «дизайнерский» приём, не плашка */
 #connectPanel::before{
   content:"";position:absolute;top:0;left:30px;right:30px;height:1px;
@@ -576,30 +585,99 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
   color:var(--text-strong)}
 .brandhero p{margin:0;color:var(--dim);font-size:12.5px;letter-spacing:-.005em;
   max-width:300px}
+
+/* живой мини-аватар: инициалы и цвет — те же хелперы (initialsOf +
+   avatarColor), что после входа рисуют аватар в рейле и баблах.
+   Пустое имя — нейтральный «?» в приглушённой плашке */
+.who-row{display:flex;align-items:flex-end;gap:12px}
+.who-avatar{
+  width:46px;height:46px;flex:none;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--hover-chip);border:1px solid var(--border2);
+  color:var(--dim);font-weight:800;font-size:16px;letter-spacing:.02em;
+  user-select:none;
+  transition:background var(--dur) var(--ease),color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+.who-avatar.filled{color:#fff;border-color:transparent;
+  text-shadow:0 1px 2px rgba(0,0,0,.18)}
+/* имя — главное поле экрана: чуть крупнее и увереннее остальных */
+#name{font-size:15px;padding:10px 13px;font-weight:600;letter-spacing:-.01em}
+
 #btnConnect{
-  width:100%;padding:11px;font-size:14px;margin-top:6px;font-weight:600;
+  width:100%;padding:12px;font-size:14px;margin-top:6px;font-weight:600;
   letter-spacing:-.005em}
 #btnConnect .ico{font-size:16px}
+/* состояние «подключаемся…»: вертушка чистым CSS (main.js лишь вешает
+   класс и меняет надпись в #btnConnectTxt). Базовое button:disabled
+   красит фон с !important — вертушка на сером потерялась бы, поэтому
+   здесь тоже !important: кнопка остаётся акцентной, но «нажать» нельзя */
+#btnConnect.loading{
+  opacity:1;pointer-events:none;transform:none!important;
+  background:var(--accent)!important;border-color:var(--accent)!important;
+  color:#fff!important;
+}
+#btnConnect.loading .ico{display:none}
+#btnConnect.loading::before{
+  content:"";width:14px;height:14px;flex:none;
+  border-radius:50%;border:2px solid rgba(255,255,255,.35);
+  border-top-color:#fff;animation:frSpin .7s linear infinite;
+}
+@keyframes frSpin{to{transform:rotate(1turn)}}
+/* подпись справа от кнопки: куда бить, если лень тянуться мышью */
+.enterhint{font-size:11.5px;color:var(--dim-2);user-select:none}
 
-/* спойлер «как подключиться» — тонкая обводка, без отдельной заливки */
-.howto{
+/* ошибка подключения — не сухая строка, а честная пилюля с «!»:
+   заметнее на периферии взгляда и не выглядит как мусор в разметке */
+#connectPanel .warn:not(:empty){
+  margin-top:12px;padding:9px 12px;border-radius:var(--radius-sm);
+  background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);
+  display:flex;gap:9px;align-items:flex-start;min-height:0;
+}
+#connectPanel .warn:not(:empty)::before{
+  content:"!";flex:none;width:16px;height:16px;margin-top:1px;
+  border-radius:50%;background:var(--err);color:#14161c;
+  font-weight:800;font-size:11px;line-height:16px;text-align:center;
+}
+
+/* спойлеры входа: «ключи» и «как подключиться» — один приём: тонкая
+   обводка, без отдельной заливки; шеврон из CSS, иконки из спрайта */
+.advkeys,.howto{
   margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-sm);
   background:transparent;padding:0 14px;
 }
-.howto summary{
+.advkeys summary,.howto summary{
   cursor:pointer;color:var(--dim);font-size:11.5px;font-weight:600;
   padding:10px 0;user-select:none;list-style:none;display:flex;
   align-items:center;gap:7px;letter-spacing:.02em;
   transition:color var(--dur-fast) var(--ease);
 }
-.howto summary::before{content:"";width:8px;height:8px;
+.advkeys summary::-webkit-details-marker,
+.howto summary::-webkit-details-marker{display:none}
+.advkeys summary::before,.howto summary::before{
+  content:"";width:8px;height:8px;flex:none;
   border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
   transform:rotate(-45deg);transition:transform var(--dur) var(--ease);
   display:inline-block;margin-right:2px}
-.howto[open] summary::before{transform:rotate(45deg)}
-.howto summary:hover{color:var(--text)}
+.advkeys[open] summary::before,.howto[open] summary::before{
+  transform:rotate(45deg)}
+.advkeys summary:hover,.howto summary:hover{color:var(--text)}
+.advkeys summary .ico{font-size:13px;color:var(--accent)}
+.advkeys .conn-grid{flex-direction:column;gap:10px;padding:2px 0 10px}
+.advkeys .chk{margin:0 0 12px}
 .howto .hint{margin:0 0 12px;display:block;line-height:1.6;
   font-size:12px;color:var(--dim)}
+/* «первый раз здесь?» — три шага с номерами-кружками вместо простыни текста */
+.howto ol{margin:0 0 12px;padding:0;list-style:none;counter-reset:step;
+  display:flex;flex-direction:column;gap:9px}
+.howto ol li{counter-increment:step;position:relative;padding-left:26px;
+  font-size:12px;line-height:1.55;color:var(--dim)}
+.howto ol li::before{content:counter(step);position:absolute;left:0;top:1px;
+  width:17px;height:17px;border-radius:50%;background:var(--hover-chip);
+  border:1px solid var(--border2);color:var(--dim);font-size:10px;
+  font-weight:700;display:inline-flex;align-items:center;
+  justify-content:center;font-variant-numeric:tabular-nums}
+.howto ol li b{color:var(--text);font-weight:600}
 
 /* ─────────────────────────── вкладки → социальный рейл ───────────────────────────
    v3.2 «Studio Social»: горизонтальная линейка вкладок превратилась
@@ -1320,6 +1398,10 @@ body.lb-open{overflow:hidden}
   .panel{padding:18px}
   .msg{max-width:88%}
   #connectPanel{margin-top:3vh;padding:24px 20px}
+  /* v3.7.1: аватар и кнопка-вертушка чуть компактнее на телефоне */
+  .who-avatar{width:40px;height:40px;font-size:14px}
+  .who-row{gap:10px}
+  #btnConnect.loading::before{width:13px;height:13px}
   #searchBox{max-width:none;flex:1}
   header{padding:11px 14px;gap:10px}
   #hostInfo{display:none}

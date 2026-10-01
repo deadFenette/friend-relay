@@ -90,16 +90,28 @@ $("btnTheme").onclick = () => {
 };
 
 /* ───────────────────────── подключение ───────────────────────── */
+/* v3.7.1: у кнопки есть «занятая» надпись и класс .loading (вертушка —
+   чистый CSS, см. style.css): раньше при нажатии кнопка просто гасла
+   (disabled), и в первый раз (вывод ключа шифрования — секунды) люди
+   не понимали, работает ли вообще что-то. Текст меняется в спане
+   btnConnectTxt — innerHTML не трогаем, иконка data-i/rocket и
+   MutationObserver иконок остаются в целости. */
+const CONNECT_BTN_LABEL = "Войти в чат";
 async function connect(){
   if (S.connecting) return;          /* ФИКС: без guard двойной клик */
   S.connecting = true;               /* давал две сессии и два пинга */
   const btn = $("btnConnect");
+  const txt = $("btnConnectTxt");
   btn.disabled = true;
+  btn.classList.add("loading");
+  if (txt) txt.textContent = "Подключаемся…";
   try {
     await connectInner();
   } finally {
     S.connecting = false;
     btn.disabled = false;
+    btn.classList.remove("loading");
+    if (txt) txt.textContent = CONNECT_BTN_LABEL;
   }
 }
 async function connectInner(){
@@ -361,6 +373,10 @@ $("btnConnect").onclick = connect;
 $("name").addEventListener("keydown", e => { if (e.key === "Enter") connect(); });
 $("key").addEventListener("keydown", e => { if (e.key === "Enter") connect(); });
 $("enckey").addEventListener("keydown", e => { if (e.key === "Enter") connect(); });
+/* v3.7.1: в ключе админа Enter тоже подключал — раньше лишь в трёх
+   полях из четырёх, хозяин сервера чувствовал себя человеком второго
+   сорта */
+$("adminkey").addEventListener("keydown", e => { if (e.key === "Enter") connect(); });
 $("btnSend").onclick = sendMsg;
 $("msgText").addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendMsg(); }
@@ -518,4 +534,41 @@ try {
   $("enckey").value = ek;
   /* (v3.5.1) ключ админа — тоже секрет: живёт в sessionStorage вкладки */
   $("adminkey").value = sessionStorage.getItem("wr_adminkey") || "";
+  /* v3.7.1: если какие-то ключи вернулись из хранилища — спойлер
+     раскрываем сами: человек должен ВИДЕТЬ, что входит с ключом,
+     а не гадать, куда они делись с прошлого раза */
+  if (k || ek || $("adminkey").value) $("advKeys").open = true;
+} catch(e){}
+
+/* ── v3.7.1: живой мини-аватар на входе ──
+   Пока человек печатает имя, круг слева показывает инициалы и цвет,
+   ровно те же, что друзья увидят в рейле после входа (initialsOf +
+   avatarColor — те же хелперы, что рисуют аватары в чате). Пустое
+   имя — нейтральный «?». Только внешность: на логику входа не влияет. */
+function paintWhoAvatar(){
+  const el = $("whoAvatar");
+  if (!el) return;
+  const name = $("name").value.trim();
+  if (!name){
+    el.textContent = "?";
+    el.classList.remove("filled");
+    el.style.background = "";
+    return;
+  }
+  el.textContent = initialsOf(name);
+  el.classList.add("filled");
+  el.style.background = avatarColor(name);
+}
+$("name").addEventListener("input", paintWhoAvatar);
+paintWhoAvatar();
+
+/* v3.7.1: фокус на имя сразу после загрузки — единственное обязательное
+   поле. На тач-устройствах не фокусируем: назойливая клавиатура на
+   телефоне хуже, чем один лишний тап. Если имя уже сохранено —
+   выделяем его: переименовать проще, чем стирать посимвольно. */
+try {
+  if (!matchMedia("(pointer: coarse)").matches){
+    $("name").focus();
+    if ($("name").value) $("name").select();
+  }
 } catch(e){}

@@ -77,6 +77,8 @@ def main() -> int:
             def join(page, name):
                 page.goto(f"https://127.0.0.1:{base}/", wait_until="domcontentloaded")
                 page.fill("#name", name)
+                # v3.7.1: ключи переехали в спойлер #advKeys
+                page.click("#advKeys summary")
                 page.fill("#key", "k")
                 page.click("#btnConnect")
                 page.wait_for_selector("#app:not(.hidden)", timeout=15000)

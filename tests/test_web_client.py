@@ -156,6 +156,31 @@ def main() -> int:
         check("main.js шлёт X-Relay-Admin на /ping",
               code == 200 and b"X-Relay-Admin" in body)
 
+        # 1b-bis. (v3.7.1) дружелюбный экран входа: имена на первом плане,
+        #     ключи — в спойлере; все старые id на месте (функционал цел),
+        #     кнопка умеет показывать «Подключаемся…»
+        #     (body выше уже перезаписан main.js — перезапрашиваем /)
+        code, body, _ = fetch(urllib.request.Request(base + "/"))
+        check("index.html: живой аватар входа (id=whoAvatar)",
+              b'id="whoAvatar"' in body)
+        check("index.html: спойлер ключей (id=advKeys)",
+              b'id="advKeys"' in body)
+        check("index.html: подпись кнопки в спане btnConnectTxt",
+              b'id="btnConnectTxt"' in body)
+        check("index.html: showKeys не потерян при переносе в спойлер",
+              b'id="showKeys"' in body)
+        req = urllib.request.Request(base + "/static/style.css")
+        code, css_body, _ = fetch(req)
+        check("style.css: вертушка кнопки входа (btnConnect.loading)",
+              code == 200 and b"btnConnect.loading" in css_body
+              and b"frSpin" in css_body)
+        req = urllib.request.Request(base + "/static/main.js")
+        code, body, _ = fetch(req)
+        check("main.js: рисует инициалы на входе (paintWhoAvatar)",
+              code == 200 and b"paintWhoAvatar" in body)
+        check("main.js: Enter в ключе админа тоже подключает",
+              code == 200 and b'$("adminkey").addEventListener' in body)
+
         # 1c. (v3.5.5) голос: мгновенная лестница реконнекта + watchdog
         #     стыла сокета; кнопки чата и пикер реакций оформлены в CSS
         req = urllib.request.Request(base + "/static/voice.js")

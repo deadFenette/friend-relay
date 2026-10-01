@@ -35,47 +35,67 @@
   </div>
 </header>
 <main>
+  <!-- v3.7.1 «Дружелюбный вход»: на первом плане — одно-единственное
+       обязательное поле, ИМЯ (оно же рисует мини-аватар с инициалами —
+       как тебя увидят друзья). Ключи доступа/шифрования/админа спрятаны
+       в спойлер «для особых случаев» — новичку они не нужны, а хост
+       развернёт одним кликом. Все id сохранены 1:1 (name, key, enckey,
+       adminkey, showKeys, btnConnect, connWarn) — main.js разницы не
+       заметит, регресс не сломан. -->
   <div class="panel" id="connectPanel">
     <div class="brandhero">
       <div class="logo" data-i="relay"></div>
       <h1>Friend Relay</h1>
-      <p>Твой приватный чат с друзьями — без серверов-посредников</p>
+      <p>Чат с друзьями в один клик — без регистрации и установки</p>
     </div>
-    <div class="conn-grid">
+
+    <div class="who-row">
+      <div class="who-avatar" id="whoAvatar" aria-hidden="true">?</div>
       <label class="field">
         <span>Твоё имя</span>
-        <input id="name" placeholder="Как тебя видеть друзья" style="width:100%" maxlength="32">
-      </label>
-      <label class="field">
-        <span>Ключ доступа <em class="opt">— если хост его включил</em></span>
-        <input id="key" type="password" placeholder="Необязательно" style="width:100%">
-      </label>
-      <label class="field">
-        <span>Ключ шифрования <em class="opt">— для секретных сообщений</em></span>
-        <input id="enckey" type="password" placeholder="Необязательно" style="width:100%">
-      </label>
-      <!-- (v3.5.1) Ключ админа: с именем хоста даёт права админа с любого
-           устройства. С машины хоста не нужен (loopback и так админ). -->
-      <label class="field">
-        <span>Ключ админа <em class="opt">— только для хоста: введи ИМЯ ХОСТА + этот ключ</em></span>
-        <input id="adminkey" type="password" placeholder="Необязательно" style="width:100%">
+        <input id="name" placeholder="Придумай себе имя" style="width:100%" maxlength="32">
       </label>
     </div>
-    <div class="row" style="margin-top:14px">
-      <button id="btnConnect" style="min-width:170px" data-i="rocket"> Подключиться</button>
+
+    <details class="advkeys" id="advKeys">
+      <summary data-i="key"> Ключи и шифрование <em class="opt">— обычно не нужны</em></summary>
+      <div class="conn-grid">
+        <label class="field">
+          <span>Ключ доступа <em class="opt">— если хост включил вход по ключу</em></span>
+          <input id="key" type="password" placeholder="Оставь пустым, если не знаешь" style="width:100%">
+        </label>
+        <label class="field">
+          <span>Ключ шифрования <em class="opt">— для секретных сообщений</em></span>
+          <input id="enckey" type="password" placeholder="Тот же «секретный ключ», что у хоста" style="width:100%">
+        </label>
+        <!-- (v3.5.1) Ключ админа: с именем хоста даёт права админа с любого
+             устройства. С машины хоста не нужен (loopback и так админ). -->
+        <label class="field">
+          <span>Ключ админа <em class="opt">— только владельцу сервера</em></span>
+          <input id="adminkey" type="password" placeholder="Имя хоста + этот ключ" style="width:100%">
+        </label>
+      </div>
       <label class="chk"><input type="checkbox" id="showKeys"> Показать ключи</label>
+    </details>
+
+    <div class="row" style="margin-top:14px">
+      <button id="btnConnect" style="min-width:170px" data-i="rocket"> <span id="btnConnectTxt">Войти в чат</span></button>
+      <span class="hint enterhint">Enter — войти</span>
     </div>
     <div class="warn" id="connWarn"></div>
+
     <details class="howto">
-      <summary>Как подключиться? Подсказка</summary>
-      <div class="hint">Хост берётся из адреса этой страницы — открывай её на хосте:
-        http://IP-хоста:8420/ (ZeroTier: http://100.x.x.x:8420/). Ключ шифрования —
-        тот же «секретный ключ», что в настройках приложения хоста: без него
-        зашифрованные сообщения не прочитать. Первый вывод ключа может занять
-        несколько секунд — дальше берётся из кеша вкладки. Ключ админа —
-        для ВЛАДЕЛЬЦА сервера: введи имя хоста и ключ (его печатает сервер при
-        старте / показывает GUI хоста) — станешь админом и из браузера.
-        С самой машины хоста админство включается само, ключ не нужен.</div>
+      <summary>Первый раз здесь? Это просто</summary>
+      <ol>
+        <li><b>Придумай имя</b> и жми «Войти в чат». Регистрации нет —
+          всё остальное на этом экране по желанию.</li>
+        <li><b>Страница не открывается?</b> Попроси у друга-хоста адрес:
+          http://IP-хоста:8420 (ZeroTier: http://100.x.x.x:8420).</li>
+        <li><b>Ключи — только если хост их включил:</b> доступ — на вход,
+          шифрование — для секретных сообщений (первый вывод ключа займёт
+          пару секунд, дальше из кеша вкладки), админ-ключ — владельцу
+          сервера. С машины хоста админство включается само.</li>
+      </ol>
     </details>
   </div>
 
