@@ -123,6 +123,19 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     relay: RelayServer = None  # type: ignore[assignment]
 
+    # v3.7.0 ФИКС «ПРЕРЫВИСТОГО ЗВУКА» (даунлинк голоса): TCP_NODELAY на
+    # сокете КЛИЕНТА. Голосовой WS-туннель /voice/ws гонит 20мс-кадры по
+    # ~2КБ; с включённым Nagle (умолчание http.server) мелкий сегмент
+    # ЗАДЕРЖИВАЕТСЯ в ядре до ACK предыдущего (RTT ZeroTier 30-150мс +
+    # delayed ack) — ровный поток 50 кадров/с превращается во всплески,
+    # джиттер-буфер браузера сохнет, звук «прерывистый, как старый скайп».
+    # Ровно тот же фикс микшер давно сделал для своих TCP-клиентов
+    # (см. mixer._register_client), но веб-тракт через HTTP-сервер
+    # пропустили. SSLSocket.setsockopt проксирует на сырой сокет, поэтому
+    # работает и для TLS-мультиплексора (tls_mux оборачивает сокет до
+    # передачи хендлеру), и для plain-подключений.
+    disable_nagle_algorithm = True
+
     # Таймаут на сокет (BaseHTTPRequestHandler по умолчанию None): без него
     # idle keep-alive соединение и «по байту в секунду» (slowloris) держали
     # поток в rfile.readline() навсегда — потоков сока не было. 30 секунд
@@ -488,6 +501,15 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
             # тихого голосового канала. Теперь сокет блокируется навсегда
             # и живёт, пока жива WS-связка браузер↔мост.
             upstream.settimeout(None)
+            # v3.7.0: TCP_NODELAY на upstream — аплинк голоса (браузер →
+            # мост) идёт мелкими 20мс-порциями; Nagle на loopback обычно
+            # безвреден (ACK мгновенный), но под нагрузкой/на Windows
+            # delayed-ack склеивает кадры во всплески — на всякий случай
+            # тракт полностью без Nagle в обе стороны.
+            try:
+                upstream.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except OSError:
+                pass
         except OSError as e:
             self._send_json(503, {"ok": False,
                                   "error": f"голосовой мост недоступен: {e}"})

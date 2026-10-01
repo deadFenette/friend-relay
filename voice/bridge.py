@@ -200,6 +200,18 @@ class VoiceBridge:
     # ── Обработка одного браузерного подключения ─────────────────────
 
     async def _handler(self, ws) -> None:
+        # v3.7.0: TCP_NODELAY на WS-сокете моста. websockets (asyncio,
+        # в отличие от sync-версии) Nagle НЕ снимает: 20мс-кадры плывут
+        # во всплесках. Хоп loopback-овый, но под нагрузкой/на Windows
+        # delayed-ack и здесь склеивает кадры — тракт звука держим
+        # полностью без Nagle (см. также http_api._tunnel_voice_ws).
+        try:
+            raw = ws.transport.get_extra_info("socket") if ws.transport else None
+            if raw is not None:
+                raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except (OSError, AttributeError):
+            pass
+
         # 1. Первый кадр — авторизация JSON-текстом
         try:
             first = await asyncio.wait_for(ws.recv(), timeout=5)

@@ -62,6 +62,14 @@ var VC = {
      подскажем, что собеседник тебя точно не слышит. */
   micVoiceSeen: false,   // был ли хоть один живой кадр с микрофона
   micHintShown: false,   // подсказку «микрофон молчит» уже показали
+  /* v3.7.0 (чистота звука): телеметрия плейаута и аплинка.
+     unders — недоборы джиттер-буфера (в ворклет и здесь, для статуса);
+     upDrops — кадры микрофона, срезанные сторожем ws.bufferedAmount:
+     при заторе аплинка лучше потерять кусок НА ЛЕТУ, чем копить
+     устаревший звук — иначе после затора собеседнику проигрывается
+     «стена прошлого» с растущей задержкой (эффект старого скайпа). */
+  unders: 0, upDrops: 0, playLevel: 0,
+  UPDROP_LIMIT_BYTES: 16384,   // ~8 кадров (160мс) очереди — дальше срезаем
 };
 
 function voiceWarn(msg){ $("voiceWarn").textContent = msg || ""; }
@@ -637,11 +645,18 @@ async function voiceStarted(){
     play.port.onmessage = (e) => {
       if (e.data && e.data.under){
         VC.lastUnderAt = Date.now();
-        /* v3.6.4: потолок адаптива 12→18 кадров (360мс). ZeroTier/VPN —
-           это TCP-затыки 100-300мс на каждой ретрансмите; 240мс не
-           хватало, буфер высыхал и голос превращался в робота. */
-        VC.jitterTarget = Math.min(18, VC.jitterTarget + 1);
+        VC.unders++;
+        /* v3.7.0: рост цели +2 кадра (40мс) за недобор — как у Qt-движка
+           (v3.6.4): ОДИН TCP-затык ZeroTier — это 100-300мс ретрансмита,
+           рост по +20мс означал 5-15 повторных недоборов, прежде чем
+           буфер дорастал до затыка — вся это время голос «прожёвывался».
+           Потолок 18 кадров (360мс) — v3.6.4. */
+        VC.jitterTarget = Math.min(18, VC.jitterTarget + 2);
         try { play.port.postMessage({targetMs: VC.jitterTarget * 20}); } catch(e2){}
+      } else if (e.data && e.data.stat){
+        /* v3.7.0: телеметрия плейаута (уровень буфера, недоборы) */
+        VC.playLevel = e.data.stat.lvl || 0;
+        VC.unders = e.data.stat.und | 0;
       }
     };
     play.connect(VC.masterGain);
@@ -716,8 +731,10 @@ function voiceTick(){
       return;
     }
   }
-  /* стабильно >10с — медленно сжимаем буфер (минимум 60мс) */
-  if (Date.now() - VC.lastUnderAt > 10000 && VC.jitterTarget > 3){
+  /* стабильно >10с — медленно сжимаем буфер (минимум 80мс: v3.7.0 —
+     было 60мс, но TCP-транспорт (WS поверх ZeroTier) сжимает поток
+     всплесками, и на 60мс каждый чих уже выжигал буфер) */
+  if (Date.now() - VC.lastUnderAt > 10000 && VC.jitterTarget > 4){
     VC.jitterTarget--;
     if (VC.playPort) try { VC.playPort.postMessage({targetMs: VC.jitterTarget * 20}); } catch(e){}
   }
@@ -735,6 +752,8 @@ function voiceTick(){
       " · потери ↑" + Math.round(VC.upPct) + "% ↓" + Math.round(VC.downPct) + "%";
   }
   text += " · джиттер " + (VC.jitterTarget * 20) + " мс" +
+    (VC.unders > 0 ? " · провалов " + VC.unders : "") +
+    (VC.upDrops > 0 ? " · срезано отправлено " + VC.upDrops : "") +
     (VC.hostVersion ? " · хост v" + VC.hostVersion : "") +
     (VC.muted ? " · микрофон выкл" : "");
   if (VC.oddOut > 0){
@@ -802,18 +821,29 @@ function pushSamples(samples){
       fr[i] = v < -32768 ? -32768 : (v > 32767 ? 32767 : v);
     }
     VC.pend.splice(0, 960);
-    if (VC.ws && VC.ws.readyState === 1){
+    /* v3.7.0 СТОРОЖ АПЛИНКА: если в WS-сокете уже застряло >160мс звука
+       (затор сети) — живой кадр СРЕЗАЕМ, а не ставим в очередь.
+       Иначе после затора отправляется «стена прошлого»: собеседник
+       дослушивает устаревшую речь с растущим отставанием. Реалтайм
+       дороже полноты: PLC на той стороне закроет дыру тишины. */
+    if (VC.ws && VC.ws.readyState === 1
+        && VC.ws.bufferedAmount < VC.UPDROP_LIMIT_BYTES){
       VC.ws.send(fr.buffer);
       VC.sentFrames++;   /* v3.6.6 (R4): для честных потерь ↑ */
+    } else {
+      VC.upDrops++;
     }
   }
   if (VC.pend.length > 19200) VC.pend.splice(0, VC.pend.length - 960);
 }
 function onPlayback(ev){
-  /* SPA-fallback: плейаут из jitter-очереди с фейдами */
+  /* SPA-fallback: плейаут из jitter-очереди с фейдами.
+     v3.7.0: тот же набор, что у ворклета — рестарт на половину цели
+     (вместо полного) + PLC-достройка хвоста (без дрена/статистики —
+     путь только для древних браузеров без AudioWorklet). */
   const out = ev.outputBuffer.getChannelData(0);
   const sr = VC.ctx ? VC.ctx.sampleRate : 48000;
-  const pre = Math.round(VC.jitterTarget * 960 * (sr / 48000));
+  const pre = Math.max(1, VC.jitterTarget >> 1) * 960 * (sr / 48000);
   let total = 0;
   for (const fr of VC.playQ) total += fr.length;
   let i = 0;
@@ -822,10 +852,15 @@ function onPlayback(ev){
     while (i < out.length && VC.playQ.length){
       const fr = VC.playQ[0];
       const need = Math.min(out.length - i, fr.length - VC.playPos);
-      for (let k = 0; k < need; k++) out[i + k] = fr[VC.playPos + k];
+      for (let k = 0; k < need; k++){
+        const v = fr[VC.playPos + k];
+        out[i + k] = v;
+        VC.lastReal = v;   /* хвост для PLC */
+      }
       VC.playPos += need; i += need;
       if (VC.playPos >= fr.length){ VC.playQ.shift(); VC.playPos = 0; }
     }
+    if (i > 0){ VC.plcRun = 0; }
     if (VC.playGap && i > 0){        /* фейд-ин после паузы */
       const n = Math.min(32, i);
       for (let k = 0; k < n; k++) out[k] *= k / n;
@@ -833,15 +868,28 @@ function onPlayback(ev){
     }
   }
   if (i < out.length){
-    if (i > 0){                       /* фейд-аут хвоста — без щелчка */
+    const budget = Math.max(0, Math.round(60 * sr / 1000) - (VC.plcRun || 0));
+    const fill = (VC.playStarted || VC.plcRun > 0)
+      ? Math.min(out.length - i, budget) : 0;
+    if (i > 0 && fill === 0){          /* фейд-аут хвоста — без щелчка */
       const n = Math.min(32, i);
       for (let k = 0; k < n; k++) out[i - 1 - k] *= k / n;
+    }
+    if (fill > 0){
+      const PLC_MAX = Math.round(60 * sr / 1000);
+      for (let k = 0; k < fill; k++){
+        const t = (VC.plcRun || 0) + k;
+        const env = 1 - t / PLC_MAX;
+        out[i + k] = (VC.lastReal || 0) * env;
+      }
+      VC.plcRun = (VC.plcRun || 0) + fill; i += fill;
     }
     for (let k = i; k < out.length; k++) out[k] = 0;
     VC.playStarted = false; VC.playGap = true;
     VC.lastUnderAt = Date.now();
-    /* v3.6.4: потолок 12→18 (360мс) — как в worklet-пути, под ZeroTier */
-    VC.jitterTarget = Math.min(18, VC.jitterTarget + 1);
+    VC.unders++;
+    /* v3.6.4/v3.7.0: потолок 18 (360мс), рост +2 кадра — как у ворклета */
+    VC.jitterTarget = Math.min(18, VC.jitterTarget + 2);
   }
 }
 function renderVoicePeople(){
@@ -905,6 +953,8 @@ function disconnectVoice(){
   VC.pend = []; VC.playQ = []; VC.playPos = 0;
   VC.playStarted = false; VC.playGap = true;
   VC.resPos = 0; VC.worklet = false;
+  VC.unders = 0; VC.upDrops = 0; VC.playLevel = 0;   /* v3.7.0 */
+  VC.plcRun = 0; VC.lastReal = 0;
   /* v3.5.6: джиттер-буфер сбрасываем к стартовым 80мс (было 8=160мс —
      после переподключения канал навсегда начинал с двойной задержки). */
   VC.jitterTarget = 4; VC.speak = {}; VC.mySpeak = false; VC.mySil = 0;

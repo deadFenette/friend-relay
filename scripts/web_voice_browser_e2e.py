@@ -58,27 +58,33 @@ PROBE_PLAY = """
   VC.__probe = { frames: [], orig: VC.playPort.postMessage.bind(VC.playPort) };
   VC.playPort.postMessage = (data, transfer) => {
     try {
-      const f = new Float32Array(data);
-      let acc = 0;
-      for (let i = 0; i < f.length; i++) acc += f[i] * f[i];
-      const rms = Math.sqrt(acc / f.length) * 32768;
-      /* ДЕТЕКТОР «БУРУНДУКА» v3.6.6: битый VcCap копил ССЫЛКИ на 128-
-         сэмпловые чанки, память переиспользовалась — весь 960-кадр
-         состоял из ОДНОГО И ТОГО ЖЕ блока, повторённого 8 раз.
-         Меряем внутрикадровое повторение: все ли 8 блоков по 128
-         сэмплов идентичны (только у НЕ тихих кадров). */
-      let rep = false;
-      if (rms > 120 && f.length === 960){
-        rep = true;
-        for (let b = 1; b < 8 && rep; b++){
-          for (let i = 0; i < 128; i++){
-            if (Math.round(f[i] * 1e5) !== Math.round(f[b * 128 + i] * 1e5)){
-              rep = false; break;
+      /* v3.7.0: меряем ТОЛЬКО бинарные PCM-кадры. Control-сообщения
+         ({under:true}, {stat:{lvl,und}}) через этот же порт раньше
+         превращались в пустой Float32Array → rms = 0/0 = NaN →
+         statistics.pstdev в питоне падал на NaN-элементе. */
+      if (data instanceof ArrayBuffer){
+        const f = new Float32Array(data);
+        let acc = 0;
+        for (let i = 0; i < f.length; i++) acc += f[i] * f[i];
+        const rms = Math.sqrt(acc / f.length) * 32768;
+        /* ДЕТЕКТОР «БУРУНДУКА» v3.6.6: битый VcCap копил ССЫЛКИ на 128-
+           сэмпловые чанки, память переиспользовалась — весь 960-кадр
+           состоял из ОДНОГО И ТОГО ЖЕ блока, повторённого 8 раз.
+           Меряем внутрикадровое повторение: все ли 8 блоков по 128
+           сэмплов идентичны (только у НЕ тихих кадров). */
+        let rep = false;
+        if (rms > 120 && f.length === 960){
+          rep = true;
+          for (let b = 1; b < 8 && rep; b++){
+            for (let i = 0; i < 128; i++){
+              if (Math.round(f[i] * 1e5) !== Math.round(f[b * 128 + i] * 1e5)){
+                rep = false; break;
+              }
             }
           }
         }
+        VC.__probe.frames.push({ rms, rep });
       }
-      VC.__probe.frames.push({ rms, rep });
     } catch (e) {}
     VC.__probe.orig(data, transfer);
   };
