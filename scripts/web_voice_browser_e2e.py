@@ -17,6 +17,12 @@ VoiceBridge, реальный web_client (voice.js + voice-worklet.js).
      (dup_ratio) мала. Баг v3.6.6 и ниже давал 0.875+ (все чанки —
      один и тот же кусок памяти); после фикса копия сразу.
      Дополнительно: разнообразие RMS между кадрами.
+  v3.6.9 добавил (полировка — проверки живучести):
+  11. ОДНОВРЕМЕННЫЙ РАЗГОВОР: после снятия мьюта оба говорят
+      вразнобой — микшер складывает, у ОБОИХ приходят живые кадры.
+  12. ОБРЫВ МОСТА: WS B принудительно рвётся → voice.js сам
+      переподключается (лестница 300мс…) → звук снова течёт в
+      ОБЕ стороны, без участия пользователя.
 
 Запуск: python scripts/web_voice_browser_e2e.py
 (нужен playwright с chromium: pip install playwright && playwright install chromium)
@@ -205,11 +211,48 @@ def main() -> int:
                       non_silent_after == 0,
                       f"non_silent_after_mute={non_silent_after}/{len(fa3)}")
 
+                # v3.6.9: снимаем мьют — снова оба говорят ОДНОВРЕМЕННО:
+                # микшер обязан сложить два потока, у каждого — живые кадры
+                b.click("#btnVoiceMute")   # Боб размутился
+                time.sleep(0.5)
+                a.evaluate("() => { VC.__probe.frames = []; }")
+                b.evaluate("() => { VC.__probe.frames = []; }")
+                time.sleep(2.5)
+                fa4 = collet_probe(a)
+                fb4 = collet_probe(b)
+                ns_a4 = sum(1 for f in fa4 if f["rms"] > 120)
+                ns_b4 = sum(1 for f in fb4 if f["rms"] > 120)
+                check("11. оба говорят одновременно — микшер складывает, "
+                      "слышат оба направления",
+                      ns_a4 >= 15 and ns_b4 >= 15,
+                      f"A живых={ns_a4}/{len(fa4)}  B живых={ns_b4}/{len(fb4)}")
+
+                # v3.6.9: ОБРЫВ — рвём WS Боба (как это делает злой роутер)
+                # и проверяем, что voice.js сам восстановит звук
+                b.evaluate("() => { const w = VC.ws; VC.ws = null;"
+                           "  if (w) try { w.close(); } catch(e){} }")
+                b.wait_for_function(
+                    "() => VC.on === true && VC.ws && "
+                    "VC.ws.readyState === 1 && VC.everConnected === true",
+                    timeout=20000)
+                time.sleep(0.5)   # дать мосту зарегистрировать нового подписчика
+                a.evaluate("() => { VC.__probe.frames = []; }")
+                time.sleep(2.5)
+                fa5 = collet_probe(a)
+                ns_a5 = sum(1 for f in fa5 if f["rms"] > 120)
+                reconnected = b.evaluate(
+                    "() => VC.on && VC.ws && VC.ws.readyState === 1")
+                check("12. обрыв моста — голос сам переподключился, "
+                      "звук от B снова идёт",
+                      reconnected and ns_a5 >= 15,
+                      f"reconnected={reconnected} живых={ns_a5}/{len(fa5)}")
+
                 warn_text = a.evaluate("() => document.getElementById('voiceWarn').textContent")
-                check("11. никаких аварийных предупреждений голоса у A",
+                check("13. никаких аварийных предупреждений голоса у A "
+                      "(даже после обрыва)",
                       "рвётся" not in warn_text and "недоступен" not in warn_text,
                       warn_text[:80])
-                check("12. на страницах нет JS-ошибок", not errs,
+                check("14. на страницах нет JS-ошибок", not errs,
                       "; ".join(errs)[:120])
             finally:
                 browser.close()

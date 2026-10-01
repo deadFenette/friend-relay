@@ -277,7 +277,135 @@ def main() -> int:
                 check("18. ЛС: лайтбокс открывается и закрывается по Esc",
                       a.evaluate("() => !document.querySelector('.lightbox')"))
 
-                check("19. на страницах нет JS-ошибок", not errs,
+                # ── 9. v3.6.9: скелетон при загрузке и аккуратный фейл ───
+                # подвешиваем /download у A ВНУТРИ страницы (висящий
+                # Promise — без playwright-routes, не оставляет хвостов):
+                # превью должно остаться img-wait (скелетон), а НЕ
+                # «сломанной картинкой»
+                (tmp / "медленный.png").write_bytes(make_png(30, 20, (40, 160, 90)))
+                a.evaluate("""() => {
+                  const of = window.fetch;
+                  window.__origFetch = of;
+                  window.__hang = true;
+                  window.fetch = (u, o) =>
+                    (window.__hang && String(u).includes('/download/'))
+                      ? new Promise(() => {})          // висим
+                      : of(u, o);
+                }""")
+                a.set_input_files("#imgInput", str(tmp / "медленный.png"))
+                slow_seen = False
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    st = a.evaluate("""() => {
+                      const im = document.querySelector(
+                        '#feed .imgprev img.img-wait');
+                      return im ? {src: im.src.slice(0, 15), n: 1}
+                                : {n: 0};
+                    }""")
+                    if st["n"]:
+                        slow_seen = st["src"].startswith("data:image/gif")
+                        break
+                    time.sleep(0.2)
+                check("19. пока превью качается — скелетон (прозрачная "
+                      "заглушка, не «сломанная картинка»)", slow_seen)
+                a.evaluate("() => { window.__hang = false; }")   # отпускаем новые
+
+                # «обрываем» /download у A — аккуратный фейл с честным тултипом
+                (tmp / "битый.png").write_bytes(make_png(30, 20, (90, 60, 200)))
+                a.evaluate("""() => {
+                  const of = window.__origFetch;
+                  window.__break = true;
+                  window.fetch = (u, o) =>
+                    (window.__break && String(u).includes('/download/'))
+                      ? Promise.reject(new Error('net drop'))
+                      : of(u, o);
+                }""")
+                a.set_input_files("#imgInput", str(tmp / "битый.png"))
+                fail_state = None
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    fail_state = a.evaluate("""() => {
+                      const im = document.querySelector(
+                        '#feed .imgprev img.img-fail');
+                      return im ? {alt: im.alt, title: im.title,
+                                   src: im.src.slice(0, 15), n: 1} : {n: 0};
+                    }""")
+                    if fail_state["n"]:
+                        break
+                    time.sleep(0.2)
+                check("20. ошибка сети — аккуратный фейл: пустой alt, "
+                      "тултип «не загрузилось», заглушка вместо иконки",
+                      bool(fail_state and fail_state.get("n")
+                           and fail_state["alt"] == ""
+                           and "не загрузилось" in fail_state["title"]
+                           and fail_state["src"].startswith("data:image/gif")),
+                      str(fail_state))
+                # восстанавливаем сеть
+                a.evaluate("""() => {
+                  window.__break = false;
+                  window.fetch = window.__origFetch;
+                }""")
+
+                # тот же файл у B (без перехвата) грузится нормально:
+                # состояния независимы по file_id. Меряем прирост готовых
+                # превью: до этой секции у B уже были img-ready (п.2 и п.13)
+                base_ready = b.evaluate(
+                    "() => document.querySelectorAll"
+                    "('#feed .imgprev img.img-ready').length")
+                b_ok = False
+                deadline = time.time() + 8
+                while time.time() < deadline:
+                    now_ready = b.evaluate(
+                        "() => document.querySelectorAll"
+                        "('#feed .imgprev img.img-ready').length")
+                    if now_ready >= base_ready + 2:   # медленный + битый
+                        b_ok = True
+                        break
+                    time.sleep(0.2)
+                check("21. у собеседника те же картинки грузятся нормально "
+                      "(состояния независимы)", b_ok,
+                      f"было {base_ready}")
+
+                # битые данные с именем .png — сервер честно отдаёт байты,
+                # но декодировать их нельзя: должны получить аккуратный
+                # фейл (onerror), а НЕ «сломанную картинку» браузера
+                fail_before = b.evaluate(
+                    "() => document.querySelectorAll"
+                    "('#feed .imgprev img.img-fail').length")
+                (tmp / "мусор.png").write_bytes(b"\x00\x01\x02 not a png")
+                b.set_input_files("#imgInput", str(tmp / "мусор.png"))
+                junk_fail = False
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    n = b.evaluate(
+                        "() => document.querySelectorAll"
+                        "('#feed .imgprev img.img-fail').length")
+                    if n > fail_before:
+                        junk_fail = True
+                        break
+                    time.sleep(0.2)
+                check("22. битые данные с именем .png — аккуратный фейл, "
+                      "не «сломанная картинка»", junk_fail)
+
+                # клик по битому превью: лайтбокс открывается-не-удалось —
+                # сам закрывается и объясняет тостом (файл остаётся доступен)
+                b.locator("#feed .imgprev img.img-fail").last.click()
+                toast_seen = False
+                deadline = time.time() + 6
+                while time.time() < deadline:
+                    t = b.evaluate(
+                        "() => [...document.querySelectorAll('.toast')]"
+                        ".map(x => x.textContent).join(' | ')")
+                    if "не удалось" in t:
+                        toast_seen = True
+                        break
+                    time.sleep(0.15)
+                lb_gone = b.evaluate("() => !document.querySelector('.lightbox')")
+                check("23. клик по битому превью — лайтбокс не зависает: "
+                      "закрылся сам с тостом-объяснением",
+                      toast_seen and lb_gone, t[:60])
+
+                check("24. на страницах нет JS-ошибок", not errs,
                       "; ".join(errs)[:140])
             finally:
                 browser.close()

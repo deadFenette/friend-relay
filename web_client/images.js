@@ -34,6 +34,22 @@ function isImageName(name){
 const IMG_URLS = new Map();     // ключ "fid" / "dm:fid" -> objectURL | "" (ошибка)
 const IMG_INFLIGHT = new Map(); // ключ -> true (уже качаем)
 const IMG_URL_CAP = 80;         // вытеснение по порядку вставки
+/* v3.6.9: прозрачный 1×1 GIF. Пока превью качается, src = эта заглушка —
+   иначе Chromium рисует в <img> без src «сломанную картинку» и alt-текст,
+   что выглядело как ошибка. Заглушка прозрачна — под ней виден
+   скелетон-шиммер из CSS (.img-wait). */
+const IMG_BLANK =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+/* Единая точка «этот <img> в состоянии фейла»: класс + нейтральная
+   заглушка + честный тултип (у нескольких баблов может быть один file_id) */
+function imgMarkFail(el){
+  el.classList.remove("img-wait");
+  el.classList.add("img-fail");
+  el.src = IMG_BLANK;
+  el.alt = "";
+  el.title = "превью не загрузилось — файл можно скачать по ссылке";
+}
 
 function imgUrlKey(fid, dm){
   return (dm ? "dm:" : "") + fid;
@@ -79,10 +95,8 @@ function imgLoadUrl(fid, dm){
     .catch(() => {
       IMG_URLS.set(key, "");          /* ошибка — не долбим сервер заново */
       IMG_INFLIGHT.delete(key);
-      document.querySelectorAll('img[data-ikey="' + key + '"]').forEach((el) => {
-        el.classList.remove("img-wait");
-        el.classList.add("img-fail");
-      });
+      document.querySelectorAll('img[data-ikey="' + key + '"]')
+        .forEach(imgMarkFail);
     });
   return null;
 }
@@ -102,13 +116,19 @@ function attachImagePreview(txt, f, dm){
   img.title = "Нажми, чтобы приблизить";
   const key = imgUrlKey(f.file_id, dm);
   img.dataset.ikey = key;
+  /* v3.6.9: недекодируемые данные (обрыв файла, не-картинка с именем
+     .png) — objectURL проставился, но распаковать не вышло. Честно
+     переводим в аккуратный фейл вместо «сломанной картинки» браузера. */
+  img.onerror = () => { if (!img.classList.contains("img-fail")) imgMarkFail(img); };
   const cached = imgLoadUrl(f.file_id, dm);
   if (cached){
     img.src = cached;
     img.classList.add("img-ready");
   } else if (cached === ""){
-    img.classList.add("img-fail");
+    imgMarkFail(img);
   } else {
+    /* v3.6.9: скелетон — прозрачная заглушка в src + шиммер из CSS */
+    img.src = IMG_BLANK;
     img.classList.add("img-wait");
   }
   img.onclick = (e) => {
@@ -307,6 +327,24 @@ function openImageLightbox(o){
   img.draggable = false;
   img.decoding = "async";
   img.src = o.url;
+  /* v3.6.9: если байты картинки битые (недекодируемые) — не показываем
+     «сломанную иконку» на весь экран: закрываем и помечаем превью в ленте */
+  img.onerror = () => {
+    if (!LB) return;
+    const key = LB.fileId ? imgUrlKey(LB.fileId, LB.dm) : "";
+    if (key){
+      IMG_URLS.set(key, "");   /* не долбим сервер: эти байты не картинка;
+                                  closeImageLightbox отзовёт битый blob */
+    }
+    closeImageLightbox();
+    if (key){
+      document.querySelectorAll('img[data-ikey="' + key + '"]')
+        .forEach(imgMarkFail);
+    }
+    if (typeof toast === "function"){
+      toast("не удалось показать картинку — файл можно скачать по ссылке");
+    }
+  };
   stage.appendChild(img);
   ov.appendChild(stage); ov.appendChild(bar);
   document.body.appendChild(ov);
