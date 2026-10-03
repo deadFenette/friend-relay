@@ -744,6 +744,19 @@ class RelayServer:
     def get_pinned_messages(self) -> list[dict]:
         return self._store.get_pinned_messages()
 
+    def search_history(self, query: str, limit: int = 50,
+                       author: str = "") -> dict:
+        """Поиск по всей истории (v3.8.0): общий чат + все каналы одной
+        выборкой, отсортированной по глобальному seq. Зашифрованные
+        сообщения не ищутся (E2E) - это отражено в ответах обоих сторов."""
+        limit = max(1, min(int(limit), 100))
+        store_hits = self._store.search_events(query, limit=limit, author=author)
+        chan_hits = self._channels.search_messages(query, limit=limit,
+                                                   author=author)
+        merged = sorted(store_hits + chan_hits, key=lambda e: e.get("seq", 0))
+        return {"results": merged[-limit:],
+                "total": len(store_hits) + len(chan_hits)}
+
     def get_file_event(self, file_id: str) -> dict | None:
         return self._store.get_file_event(file_id)
 

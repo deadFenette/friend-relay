@@ -514,8 +514,18 @@ function addBubble(o){
     updateUnreadBadge();
     /* v2.0.2: звук «динь» о новом сообщении, когда вкладка НЕ активна
        (двухтональный, как в Qt v1.9.6). Пока читаешь ленту — молчим. */
-    if (document.hidden && typeof notifyEnabled === "function" && notifyEnabled())
+    if (document.hidden && typeof notifyEnabled === "function" && notifyEnabled()){
       notifyBeep();
+      /* v3.8.0: ОС-уведомление с именем автора и текстом — покажется,
+         только если разрешение выдано (запрос — при включении звука,
+         см. notify.js). Файл — именем, текст — сниппетом. */
+      if (typeof osNotify === "function"){
+        const body = o.file
+          ? "файл: " + (o.text && o.text.name ? o.text.name : "")
+          : String(o.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+        osNotify(o.from || "Чат", body, "fr-chat");
+      }
+    }
   }
   updateJumpPill();
   if (S.filterActive) applyFeedFilter();   /* новый бабл проходит через активный фильтр */
@@ -941,8 +951,12 @@ async function loadOlderMessages(){
   if (S.oldestSeq === Infinity || S.oldestSeq <= 1) return;
   feedLoadPending = true;
   try {
+    /* ФИКС (v3.8.0): сервер /events НЕ шлёт поле ok вовсе (ни в одном
+       режиме) — проверка !json.ok была всегда истинной и МОЛЧА
+       выбрасывала каждый батч: подгрузка истории скроллом вверх не
+       работала с самого v1.9.5. Строгая форма, как в pollTick. */
     const {json} = await apiGet("/events?before=" + S.oldestSeq + "&count=50");
-    if (!json || !json.ok || !json.events) return;
+    if (!json || json.ok === false || !json.events) return;
     const events = json.events;
     if (!events.length) return;
     const feed = $("feed");

@@ -447,6 +447,17 @@ $("btnChanDel").onclick = deleteChannel;
 $("btnPins").onclick = () => togglePinPanel();
 $("btnPinClose").onclick = () => togglePinPanel(false);
 
+/* v3.8.0: панель поиска по ВСЕЙ истории (логика — search.js) */
+$("btnHist").onclick = () => toggleHistPanel();
+$("btnHistClose").onclick = () => toggleHistPanel(false);
+$("btnHistRun").onclick = runHistorySearch;
+$("histQ").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") runHistorySearch();
+});
+$("histAuthor").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") runHistorySearch();
+});
+
 /* v2.0.5: окно игры — закрыть по ✕ или Esc (клик мимо НЕ закрывает:
    случайный клик не должен ронять партию) */
 $("btnGameClose").onclick = () => closeGame();
@@ -504,6 +515,17 @@ function notifyEnabled(){
     try { localStorage.setItem("wr_notify", now ? "1" : "0"); } catch(e){}
     draw();
     toast(now ? "Звук новых сообщений включён" : "Звук новых сообщений выключен");
+    /* v3.8.0: при включении звука заодно спрашиваем разрешение на
+       ОС-уведомления (единственный раз, по жесту пользователя; отказ
+       не мешает звуку — просто не будет системных попапов) */
+    if (now && typeof osNotifyMaybeAsk === "function"){
+      osNotifyMaybeAsk().then((p) => {
+        if (p === "granted")
+          toast("ОС-уведомления включены — сверни вкладку и проверь");
+        else if (p === "denied")
+          toast("Браузер запретил ОС-уведомления — звук останется");
+      });
+    }
   };
 })();
 

@@ -748,6 +748,77 @@ class EventStore:
         pinned.sort(key=lambda e: e.get("ts", 0))
         return pinned
 
+    def search_events(self, query: str, limit: int = 50,
+                      author: str = "") -> list[dict]:
+        """Поиск по журналу общего чата (v3.8.0): регистронезависимая
+        подстрока в тексте сообщений и именах файлов. Сканируется ВЕСЬ лог
+        на диске - включая события, вытесненные из кеша (тот же шаблон
+        чтения, что у пинов). Правки учитываются: ищем по АКТУАЛЬНОМУ
+        тексту (дельты edit переигрываются, как в _load_history).
+        Зашифрованные сообщения не ищутся честно: сервер не может их
+        прочитать (E2E), осмысленной подстроки в шифротексте не бывает.
+        Удалённые сообщения (tombstone) в результаты не попадают.
+        Возвращает последние limit совпадений, от старых к новым."""
+        q = (query or "").strip().lower()
+        if len(q) < 2:
+            return []
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 50
+        author_l = (author or "").strip().lower()
+
+        raw_events = load_history(self.history_path)
+        deltas = self.build_delta_map(raw_events)
+        deleted: set[int] = set()
+        for ev in raw_events:
+            if ev.get("kind") == EVENT_KIND_DELETE:
+                target = ev.get("target_seq")
+                if isinstance(target, int):
+                    deleted.add(target)
+
+        hits: list[dict] = []
+        for ev in raw_events:
+            kind = ev.get("kind")
+            if kind not in (EVENT_KIND_TEXT, EVENT_KIND_FILE):
+                continue
+            seq = ev.get("seq")
+            if seq in deleted:
+                continue
+            if author_l and str(ev.get("from", "")).lower() != author_l:
+                continue
+            if kind == EVENT_KIND_TEXT:
+                if ev.get("encrypted"):
+                    continue
+                text = ev.get("text")
+                if not isinstance(text, str) or not text:
+                    continue
+                if seq in deltas:
+                    ev = dict(ev)
+                    for delta in deltas[seq]:
+                        self.apply_delta(ev, delta)
+                    text = ev.get("text") or ""
+                if q in text.lower():
+                    hits.append({
+                        "seq": seq, "kind": "text",
+                        "from": ev.get("from", ""), "ts": ev.get("ts", 0),
+                        "text": text, "edited": bool(ev.get("edited")),
+                    })
+            else:   # EVENT_KIND_FILE - ищем по имени файла
+                name = str(ev.get("name", ""))
+                if q in name.lower():
+                    hits.append({
+                        "seq": seq, "kind": "file",
+                        "from": ev.get("from", ""), "ts": ev.get("ts", 0),
+                        "text": "",
+                        "file": {"file_id": ev.get("file_id", ""),
+                                 "name": name, "size": ev.get("size", 0),
+                                 "sha256": ev.get("sha256", "")},
+                    })
+
+        hits.sort(key=lambda e: e.get("seq", 0))
+        return hits[-limit:]
+
     # -- файловая витрина ---------------------------------------------------
     def get_file_event(self, file_id: str) -> dict | None:
         with self._lock:

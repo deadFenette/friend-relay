@@ -136,6 +136,8 @@
         <span style="flex:1"></span>
         <!-- v2.0.3: панель закреплённых сообщений (GET /pinned) -->
         <button id="btnPins" class="sec" title="Закреплённые сообщения" data-i="pin"></button>
+        <!-- v3.8.0: поиск по ВСЕЙ истории (GET /search, search.js) -->
+        <button id="btnHist" class="sec" title="Поиск по всей истории" data-i="search"></button>
         <!-- v2.0.2: поиск по загруженной ленте + звук-уведомление -->
         <input id="searchBox" placeholder="Поиск по чату…">
         <span class="hint" id="searchStat"></span>
@@ -147,6 +149,23 @@
         <div class="pinpanel-head">Закреплённые сообщения
           <button id="btnPinClose" class="sec" data-i="x"></button></div>
         <div id="pinList"></div>
+      </div>
+      <!-- v3.8.0: панель поиска по ВСЕЙ истории (общий чат + каналы;
+           зашифрованное не ищется — E2E, см. search.js) -->
+      <div id="histPanel" class="pinpanel histpanel hidden">
+        <div class="pinpanel-head">Поиск по истории
+          <span class="hint" id="histStat"></span>
+          <button id="btnHistClose" class="sec" data-i="x"></button></div>
+        <div class="histcontrols">
+          <input id="histQ" placeholder="Что ищем… (от 2 символов)" maxlength="200">
+          <input id="histAuthor" placeholder="автор — можно пусто" maxlength="64">
+          <button id="btnHistRun">Найти</button>
+        </div>
+        <div id="histList"></div>
+        <div class="hint histhint">Ищет во всём журнале общего чата и во всех
+          каналах, даже в тех сообщениях, что давно уехали из ленты.
+          Зашифрованные сообщения не ищутся (сервер их не читает), ЛС —
+          приватны.</div>
       </div>
       <div id="feed"></div>
       <div id="composer">
@@ -160,6 +179,12 @@
       </div>
       <div class="warn" id="chatWarn"></div>
       <button id="jumpDown" class="jumppill hidden">вниз <span id="jumpCnt"></span></button>
+      <!-- v3.8.0: оверлей drag&drop — рамка при перетаскивании файла в чат
+           (pointer-events:none, ловит document-хендлер в images.js) -->
+      <div id="dropOverlay" class="dropzone hidden">
+        <div class="dropzone-ico" data-i="attach"></div>
+        <div class="dropzone-t">Отпусти файл — отправим в чат</div>
+      </div>
     </div>
 
     <div class="panel hidden" id="tab-dm">
@@ -532,6 +557,9 @@
 <script src="/static/voice.js"></script>
 <!-- v3.6.8: скриншоты и картинки в чате — превью + лайтбокс -->
 <script src="/static/images.js"></script>
+<!-- v3.8.0: поиск по всей истории (search.js) и ОС-уведомления (notify.js) -->
+<script src="/static/search.js"></script>
+<script src="/static/notify.js"></script>
 <script src="/static/music.js"></script>
 <!-- v3.6.0: демонстрация экрана (до appearance/nochnik — им нужен DOM панели) -->
 <script src="/static/screen.js"></script>

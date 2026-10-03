@@ -202,6 +202,57 @@ class ChannelManager:
 
         return messages[-limit:] if limit else messages
 
+    def search_messages(self, query: str, limit: int = 50,
+                        author: str = "", channel: str = "") -> list[dict]:
+        """Поиск по сообщениям каналов (v3.8.0). Сканирует все *.jsonl в
+        channels_dir (первая строка - метаданные, она пропускается), либо
+        один канал, если задан channel. Регистронезависимая подстрока.
+        Зашифрованные сообщения пропускаются честно: сервер не может их
+        прочитать (E2E). Возвращает последние limit совпадений от старых
+        к новым; у каждого результата есть поле channel - имя канала."""
+        q = (query or "").strip().lower()
+        if len(q) < 2:
+            return []
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 50
+        author_l = (author or "").strip().lower()
+        only = _safe_name(channel) if channel else ""
+
+        hits = []
+        for channel_file in sorted(self.channels_dir.glob("*.jsonl")):
+            if only and channel_file.stem != only:
+                continue
+            try:
+                with open(channel_file, encoding="utf-8") as f:
+                    lines = f.readlines()[1:]   # строка 1 - метаданные канала
+            except OSError:
+                continue
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if msg.get("kind") != "channel_message":
+                    continue
+                if author_l and str(msg.get("from", "")).lower() != author_l:
+                    continue
+                text = msg.get("text")
+                if not isinstance(text, str) or not text or msg.get("encrypted"):
+                    continue
+                if q in text.lower():
+                    hits.append({
+                        "seq": msg.get("seq", 0), "kind": "text",
+                        "from": msg.get("from", ""), "ts": msg.get("ts", 0),
+                        "text": text,
+                        "channel": msg.get("channel") or channel_file.stem,
+                    })
+        hits.sort(key=lambda e: e.get("seq", 0))
+        return hits[-limit:]
+
     # ── Участники канала ───────────────────────────────────────────
 
     def add_channel_member(self, channel_name: str, username: str) -> dict:

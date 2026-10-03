@@ -4,7 +4,9 @@
    ЧТО УМЕЕТ:
    1. Загрузка скриншота/картинки прямо из чата:
       - кнопка со скрепкой в композере (выбор файла, можно несколько);
-      - Ctrl+V — скриншот из буфера (Win+Shift+S → Ctrl+V, как все привыкли).
+      - Ctrl+V — скриншот из буфера (Win+Shift+S → Ctrl+V, как все привыкли);
+      - drag&drop (v3.8.0) — перетащи ЛЮБОЙ файл в окно чата: картинка
+        уедет с превью, остальной файл — обычным file-событием.
       Файл уходит на /send_file (тот же механизм, что у «Файлов»), в ленту
       приезжает обычное file-событие — его видят и веб, и Qt-клиент.
    2. Превью в ленте: file-события с именем-картинкой (png/jpg/gif/webp/
@@ -161,16 +163,26 @@ async function uploadChatImages(files){
   for (const f of imgs) await uploadChatImage(f);
 }
 
-async function uploadChatImage(file){
+/* v3.8.0: обобщённая загрузка ЛЮБОГО файла в чат (пришёл по drag&drop).
+   Картинки идут прежним путём (превью+лайтбокс), остальное — обычным
+   file-событием: бабл со ссылкой видят и веб, и Qt-клиент. */
+async function uploadChatFile(file){
   warn("chatWarn", "");
   try {
+    const isImg = (file.type || "").startsWith("image/") ||
+      isImageName(file.name);
     /* имя из буфера обмена Chromium — "image.png"; если пусто — соберём */
     let name = file.name || "";
-    if (!name || name === "image"){
+    if ((!name || name === "image") && isImg){
       name = "скриншот " +
         new Date().toLocaleString("ru-RU",
           {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) +
         ".png";
+    }
+    if (!name){
+      name = "файл " +
+        new Date().toLocaleString("ru-RU",
+          {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
     }
     const buf = await file.arrayBuffer();
     const sha = await sha256OfBuffer(buf);   /* forge на http, subtle на https */
@@ -190,7 +202,7 @@ async function uploadChatImage(file){
     });
     const json = await safeJson(r) || {ok: false, error: "HTTP " + r.status};
     if (json.ok){
-      toast("Скриншот отправлен: " + name);
+      toast((isImg ? "Скриншот отправлен: " : "Файл отправлен: ") + name);
       /* событие file приедет в ленту ближайшим pollTick — дергаем сразу */
       await pollTick();
     } else {
@@ -199,6 +211,22 @@ async function uploadChatImage(file){
   } catch(e){
     warn("chatWarn", "не залилось: " + e);
   }
+}
+
+/* прежнее имя — для Ctrl+V и кнопки-скрепки (там картинки уже отфильтрованы) */
+async function uploadChatImage(file){
+  return uploadChatFile(file);
+}
+
+/* v3.8.0: drop принимает ЛЮБЫЕ файлы (в paste картинки — потому что
+   только их буфер кладёт с осмысленным именем) */
+async function uploadChatFiles(files){
+  if (!files || !files.length) return;
+  if (!S.token){
+    warn("chatWarn", "Сначала подключись к серверу");
+    return;
+  }
+  for (const f of files) await uploadChatFile(f);
 }
 
 /* Ctrl+V со скриншотом в буфере — грузим сразу, когда открыт чат.
@@ -225,6 +253,52 @@ document.addEventListener("paste", (e) => {
     if (inp.files && inp.files.length) uploadChatImages(inp.files);
     inp.value = "";               /* тот же файл можно выбрать повторно */
   };
+})();
+
+/* ── v3.8.0: drag&drop файлов прямо в чат ──
+   Зона — вкладка «Чат» целиком; оверлей #dropOverlay подсвечивает зону.
+   Счётчик dragenter/dragleave нужен, потому что leave срабатывает на
+   каждом пересечении границы дочерних элементов. Реагируем только на
+   перенос ФАЙЛОВ (types содержит "Files") — перетаскивание текста
+   внутри страницы не трогаем. */
+(function wireChatDrop(){
+  const ov = $("dropOverlay");
+  let depth = 0;
+  const chatVisible = () => {
+    const t = $("tab-chat");
+    return !!(t && !t.classList.contains("hidden") && S.token);
+  };
+  const hasFiles = (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types) return false;
+    for (const t of e.dataTransfer.types){
+      if (t === "Files") return true;
+    }
+    return false;
+  };
+  const show = (v) => { if (ov) ov.classList.toggle("hidden", !v); };
+  document.addEventListener("dragenter", (e) => {
+    if (!hasFiles(e) || !chatVisible()) return;
+    e.preventDefault();
+    depth++;
+    show(true);
+  });
+  document.addEventListener("dragover", (e) => {
+    if (!depth) return;
+    e.preventDefault();           /* без этого браузер не пришлёт drop */
+  });
+  document.addEventListener("dragleave", () => {
+    if (!depth) return;
+    depth--;
+    if (depth <= 0){ depth = 0; show(false); }
+  });
+  document.addEventListener("drop", (e) => {
+    depth = 0;
+    show(false);
+    if (!hasFiles(e) || !chatVisible()) return;
+    e.preventDefault();           /* браузер сам файл не откроет */
+    const fs = e.dataTransfer.files;
+    if (fs && fs.length) uploadChatFiles(fs);
+  });
 })();
 
 /* ─────────── лайтбокс ─────────── */

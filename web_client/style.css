@@ -1325,6 +1325,56 @@ body.lb-open{overflow:hidden}
   100%{box-shadow:0 0 0 3px transparent}}
 .msg.flash{animation:flashIn 1.6s var(--ease-out)}
 
+/* ───────────────── панель поиска по истории (v3.8.0) ─────────────────
+   Переиспользует каркас .pinpanel; своё — строка контролов, чип канала
+   и подсветка совпадения. Только токены тем — скины подхватят сами. */
+.histcontrols{
+  display:flex;gap:6px;padding:8px 10px;align-items:center;
+  border-bottom:1px solid var(--border);
+}
+.histcontrols input{
+  flex:1;min-width:0;font-size:12.5px;
+}
+.histcontrols input+input{flex:none;max-width:180px}
+.histcontrols button{flex:none;padding:7px 14px;font-size:12px}
+#histList{max-height:280px;overflow-y:auto;padding:4px}
+.histrow{
+  display:flex;align-items:baseline;gap:8px;padding:8px 10px;
+  border-radius:6px;cursor:pointer;
+  transition:background var(--dur-fast) var(--ease);
+}
+.histrow:hover{background:var(--accent-soft)}
+.histrow .hchan{
+  flex:none;padding:1px 7px;border-radius:999px;
+  background:var(--accent-soft);color:var(--accent);
+  font-size:10px;font-weight:700;letter-spacing:.03em;
+}
+.histrow .hl{
+  background:var(--accent-soft);color:var(--accent);
+  border-radius:3px;padding:0 1px;font-weight:700;
+}
+.histrow.off{opacity:.6;cursor:default}
+.histhint{padding:6px 10px;border-top:1px solid var(--border)}
+
+/* ───────────────── оверлей drag&drop файлов (v3.8.0) ─────────────────
+   Ловца событий живёт в images.js (document-level); сам оверлей
+   pointer-events:none — drop доходит до document без посредников. */
+.dropzone{
+  position:absolute;inset:6px;z-index:30;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;pointer-events:none;
+  background:color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter:blur(2px);
+  border:2px dashed var(--accent);border-radius:var(--radius);
+}
+.dropzone .dropzone-ico{
+  width:34px;height:34px;color:var(--accent);opacity:.9;
+}
+.dropzone .dropzone-ico svg{width:100%;height:100%}
+.dropzone .dropzone-t{
+  color:var(--accent);font-size:13px;font-weight:700;letter-spacing:.02em;
+}
+
 /* ─────────────────────────── мини-маркдаун ─────────────────────────── */
 .msg .txt code,.msg .txt .mdcode{
   font-family:var(--font-mono);font-size:12px;line-height:1.5;

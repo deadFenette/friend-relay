@@ -711,6 +711,8 @@ const CHROME_SELECTORS = [
   ".subhead",
   /* статичные .gameicon из featured-секции тоже подхватываем (data-i) */
   ".gameicon[data-i]",
+  /* v3.8.0: иконка-скрепка в оверлее drag&drop */
+  ".dropzone-ico[data-i]",
   ".games-section-title[data-i]",
   ".chess-back",
   /* v3.2: дочистка — кнопки действий баблов, файловая витрина,

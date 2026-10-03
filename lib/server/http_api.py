@@ -1010,6 +1010,29 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         pinned = self.relay.get_pinned_messages()
         self._send_json(200, {"ok": True, "pinned": pinned})
 
+    def _get_search(self, parsed):
+        # (v3.8.0) Поиск по ВСЕЙ истории: общий чат + каналы.
+        # q - что ищем (минимум 2 символа, регистр не важен), author -
+        # необязательный фильтр по автору, limit - сколько последних
+        # совпадений вернуть (10-100, дефолт 50). Зашифрованные сообщения
+        # не ищутся честно: сервер их не читает (E2E).
+        qs = parse_qs(parsed.query)
+        q = (qs.get("q", [""])[0] or "").strip()
+        if len(q) < 2:
+            self._send_json(400, {"ok": False,
+                "error": "запрос короче 2 символов"})
+            return
+        author = (qs.get("author", [""])[0] or "").strip()[:64]
+        limit = 50
+        if "limit" in qs:
+            try:
+                limit = max(10, min(int(qs["limit"][0]), 100))
+            except ValueError:
+                limit = 50
+        out = self.relay.search_history(q, limit=limit, author=author)
+        self._send_json(200, {"ok": True, "results": out["results"],
+                              "total": out["total"]})
+
     def _get_dm_history(self, parsed):
         # Получение истории личных сообщений - раньше этот роут был по
         # ошибке зарегистрирован внутри do_POST, а клиент всегда запрашивал
@@ -2022,6 +2045,7 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         "/voxel/info": _get_voxel_info,
         "/voxel/sessions": _get_voxel_sessions,
         "/pinned": _get_pinned,
+        "/search": _get_search,              # (v3.8.0) поиск по всей истории
         "/dm/history": _get_dm_history,
         "/dm/conversations": _get_dm_conversations,
         "/channels": _get_channels,

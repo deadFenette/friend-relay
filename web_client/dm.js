@@ -34,6 +34,7 @@ const DM = {
   req: 0,          // счётчик запросов: устаревший ответ не трогает ленту
   sending: false,  // guard двойной отправки (как в chat.js)
   uploading: false, // guard двойной заливки файла
+  osLastNotified: {}, // v3.8.0: {peer: ts} — не дублируем ОС-уведомления
 };
 /* как часто обновлять бейдж ЛС (вызывает main.js в общем такте) */
 const DM_BADGE_MS = 6000;
@@ -78,7 +79,18 @@ async function dmBadgeTick(){
     DM_SEEN_INIT = true;
     let unread = 0;
     for (const c of convs){
-      if ((c.last_time || 0) > (seen[c.user] || 0)) unread++;
+      const lt = c.last_time || 0;
+      if (lt > (seen[c.user] || 0)){
+        unread++;
+        /* v3.8.0: ОС-уведомление о новом ЛС — не чаще одного на новое
+           сообщение от каждого собеседника; покажется только при
+           неактивной вкладке (проверит notify.js) */
+        if (lt > (DM.osLastNotified[c.user] || 0) &&
+            typeof osNotify === "function"){
+          DM.osLastNotified[c.user] = lt;
+          osNotify(c.user, "Личное сообщение", "fr-dm:" + c.user);
+        }
+      }
     }
     /* открытый диалог с открытой вкладкой считается прочитанным:
        pollDm уже обновил ленту и поставил отметку (см. loadDmMessages) */
