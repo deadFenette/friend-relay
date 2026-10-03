@@ -382,6 +382,13 @@
         <label class="field"><span>Обработка звука браузером</span>
           <span class="chk"><input type="checkbox" id="dspCheck" checked>
             шумодав · эхоподавление · автогромкость</span></label>
+        <!-- v3.7.2: шумодав RNNoise (wasm в аудио-ворклете) + режим рации -->
+        <label class="field"><span>Шумодав RNNoise <em class="opt" id="rnState"></em></span>
+          <span class="chk"><input type="checkbox" id="rnCheck" disabled>
+            вентилятор, клавиатура, гул — убрать сильнее браузерного</span></label>
+        <label class="field"><span>Режим рации (PTT)</span>
+          <span class="chk"><input type="checkbox" id="pttCheck">
+            микрофон закрыт; удерживай <b>V</b> или <b>Пробел</b> — и говори</span></label>
         <div class="field">
           <span>Уровень микрофона</span>
           <div class="meter"><div id="micMeter"></div></div>

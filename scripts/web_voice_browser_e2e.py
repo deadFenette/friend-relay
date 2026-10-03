@@ -115,6 +115,13 @@ def connect_and_join_voice(page, name: str, port: int) -> None:
     # playPort появляется ПОСЛЕ асинхронного addModule (voiceStarted):
     # VC.on ещё не гарантия, что аудио-граф собран — ждём именно его
     page.wait_for_function("() => !!VC.playPort", timeout=15000)
+    # v3.7.2: шумодав RNNoise теперь ВКЛ ПО УМОЛЧАНИЮ и давит бипы
+    # фейк-мика до нуля (не-речь). Этот сценарий проверяет САМ ТРАКТ —
+    # глушим шумодав, как это сделал бы пользователь; поведенческие
+    # проверки самого RNNoise — в scripts/web_voice_ux_e2e.py.
+    page.wait_for_function("() => VC.rnReady === true", timeout=15000)
+    page.click("#rnCheck")
+    page.wait_for_function("() => VC.rnWanted === false", timeout=5000)
 
 
 def main() -> int:

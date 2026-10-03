@@ -4,25 +4,139 @@
    Blob — при разбиении клиента на модули переехал в настоящий файл).
 
    VcCap — захват: копит сэмплы и шлёт батчами по 20мс (960 сэмплов
-   при 48кГц, v2.0).
+   при 48кГц, v2.0); v3.7.2 — ОПЦИОНАЛЬНЫЙ ШУМОДАВ RNNoise (wasm)
+   внутри захвата, до батчинга.
    VcPlay — плейаут: джиттер-буфер с пре-буфером, PLC-достройка
    микрозазоров (v3.7.0), фейды ~2мс на стыках звук↔тишина (без
    щелчков «ТЦЦЦ»), дренирование задержки на тишине. */
 
 class VcCap extends AudioWorkletProcessor {
-  constructor(){ super(); this.b = []; this.n = 0; }
+  constructor(){
+    super(); this.b = []; this.n = 0;
+    /* ── v3.7.2: ШУМОДАВ RNNoise ───────────────────────────────────
+       RNNoise ест моно 48кГц кадрами по 480 сэмплов (10мс) и требует
+       СИНХРОННОГО wasm в аудио-потоке. fetch в AudioWorkletGlobalScope
+       нет, поэтому байты wasm приносит voice.js (main thread):
+       fetch('/static/rnnoise.wasm') → port.postMessage({wasm}, [буфер]).
+       Здесь компилируем синхронно (new WebAssembly.Module — sync API
+       разрешён в ворклете) и создаём состояние стандартной модели.
+
+       wasm-билд @echogarden/rnnoise-wasm 0.2.0 (RNNoise © Xiph/Org,
+       BSD — web_client/RNNOISE_LICENSE): крошечный (126КБ), экспорты
+       одно-буквенные: c=memory, d=call_ctors, f=get_frame_size,
+       h=create, i=destroy, k=process_frame(state,in,out), l=malloc;
+       импорты: a.a=resize_heap(size)->1/0, a.b=memcpy(dest,src,n). */
+    this.rn = false; this.rnReady = false; this.rnFailed = false;
+    this.rnMem = null; this.rnEx = null; this.rnState = 0;
+    this.rnFrame = 480; this.rnIn = 0; this.rnOut = 0;
+    this.rnHeap = null; this.rnBuf = []; this.rnN = 0;
+    this.port.onmessage = (e) => {
+      const d = e.data || {};
+      if (d.wasm !== undefined){ this.rnInit(d.wasm); return; }
+      if (d.rn !== undefined){ this.rn = !!d.rn; return; }
+    };
+  }
+  rnInit(bytes){
+    if (this.rnFailed) return;
+    try {
+      const ex = this.rnEx = new WebAssembly.Instance(
+        new WebAssembly.Module(new Uint8Array(bytes)),
+        { a: {
+            b: (dest, src, num) => {           /* emscripten memcpy */
+              dest >>>= 0; src >>>= 0; num >>>= 0;
+              new Uint8Array(this.rnMem.buffer).copyWithin(dest, src, src + num);
+              return dest;
+            },
+            a: (requested) => {                /* resize_heap */
+              requested >>>= 0;
+              const old = this.rnMem.buffer.byteLength;
+              if (requested <= old) return 1;
+              const pages = Math.ceil((requested - old) / 65536);
+              try { this.rnMem.grow(pages); } catch(err){ return 0; }
+              this.rnHeap = null;              /* виды переедут на рост */
+              return 1;
+            },
+        } });
+      const pick = (...names) => {
+        for (const n of names){ const f = ex.exports[n]; if (f) return f; }
+        return null;
+      };
+      this.rnMem = ex.exports.memory || ex.exports.c;
+      if (!this.rnMem) throw new Error("no memory export");
+      const ctor = pick("d", "__wasm_call_ctors");
+      if (ctor) ctor();
+      const create = pick("h", "_rnnoise_create");
+      const frameSize = pick("f", "_rnnoise_get_frame_size");
+      const proc = pick("k", "_rnnoise_process_frame");
+      const malloc = pick("l", "_malloc", "malloc");
+      if (!create || !proc || !malloc) throw new Error("no rnnoise exports");
+      this.rnState = create(0) | 0;            /* 0 = стандартная модель */
+      this.rnFrame = frameSize ? (frameSize() | 0) : 480;
+      if (this.rnFrame <= 0) this.rnFrame = 480;
+      this.rnIn = malloc(this.rnFrame * 4) | 0;
+      this.rnOut = malloc(this.rnFrame * 4) | 0;
+      this.rnProc = proc;
+      if (!this.rnState || !this.rnIn || !this.rnOut)
+        throw new Error("rnnoise alloc failed");
+      this.rnReady = true;
+      this.port.postMessage({rnReady: true});
+    } catch(err){
+      this.rnReady = false; this.rnFailed = true;
+      this.port.postMessage({rnReady: false, rnError: String(err)});
+    }
+  }
+  /* Вход-чанк (128 сэмплов) → буфер 480 → wasm → выход (0..N сэмплов).
+     Возвращает denoised-кусок или null, если 480 ещё не набралось. */
+  rnProcess(ch){
+    this.rnBuf.push(new Float32Array(ch)); this.rnN += ch.length;
+    if (this.rnN < this.rnFrame) return null;
+    if (!this.rnHeap) this.rnHeap = new Float32Array(this.rnMem.buffer);
+    const out = new Float32Array(this.rnN);
+    let k = 0;
+    while (this.rnN >= this.rnFrame){
+      /* слить накопленное в непрерывный вход (кадры редкие — ок) */
+      const inp = new Float32Array(this.rnFrame);
+      let filled = 0;
+      while (filled < this.rnFrame && this.rnBuf.length){
+        const c = this.rnBuf[0];
+        const take = Math.min(this.rnFrame - filled, c.length);
+        inp.set(c.subarray(0, take), filled);
+        filled += take;
+        if (take < c.length) this.rnBuf[0] = c.subarray(take);
+        else this.rnBuf.shift();
+      }
+      this.rnN -= filled;
+      if (this.rnHeap.buffer !== this.rnMem.buffer || this.rnHeap.length * 4 < this.rnMem.buffer.byteLength)
+        this.rnHeap = new Float32Array(this.rnMem.buffer);
+      this.rnHeap.set(inp, this.rnIn >> 2);
+      this.rnProc(this.rnState, this.rnIn, this.rnOut);
+      out.set(this.rnHeap.subarray(this.rnOut >> 2,
+        (this.rnOut >> 2) + this.rnFrame), k);
+      k += this.rnFrame;
+    }
+    return k ? out.subarray(0, k) : null;
+  }
   process(inputs){
     const ch = inputs[0] && inputs[0][0];
     if (ch){
-      /* v3.6.7 ФИКС «БУРУНДУКА»: копируем чанк СРАЗУ (new Float32Array).
-         По спеке AudioWorklet массив inputs валиден ТОЛЬКО внутри текущего
-         process(): Chrome переиспользует ту же память под следующий рендер.
-         Раньше мы копили ССЫЛКИ и копировали позже, при флеше батча —
-         к этому моменту все накопленные чанки показывали ОДИН И ТОТ ЖЕ
-         (самый свежий) кусок: собеседник слышал 128 сэмплов, повторённые
-         8 раз — жужжащий «бурундук» вместо голоса. Проверено в Chromium:
-         dup_ratio 0.875 (7 из 8 чанков идентичны) -> 0 после фикса. */
-      this.b.push(new Float32Array(ch)); this.n += ch.length;
+      /* v3.7.2: шумодав ДО батчинга (включается из voice.js).
+         Только на контексте 48кГц — RNNoise жёстко требует 48к. */
+      if (this.rn && this.rnReady && sampleRate === 48000){
+        const den = this.rnProcess(ch);
+        if (den && den.length){
+          /* v3.6.7 ФИКС «БУРУНДУКА»: копируем чанк СРАЗУ (new Float32Array).
+             По спеке AudioWorklet массив inputs валиден ТОЛЬКО внутри текущего
+             process(): Chrome переиспользует ту же память под следующий рендер.
+             Раньше мы копили ССЫЛКИ и копировали позже, при флеше батча —
+             к этому моменту все накопленные чанки показывали ОДИН И ТОТ ЖЕ
+             (самый свежий) кусок: собеседник слышал 128 сэмплов, повторённые
+             8 раз — жужжащий «бурундук» вместо голоса. Проверено в Chromium:
+             dup_ratio 0.875 (7 из 8 чанков идентичны) -> 0 после фикса. */
+          this.b.push(new Float32Array(den)); this.n += den.length;
+        }
+      } else {
+        this.b.push(new Float32Array(ch)); this.n += ch.length;
+      }
       if (this.n >= 960){
         const o = new Float32Array(this.n);
         let k = 0;

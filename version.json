@@ -1,5 +1,5 @@
 {
-  "version": "3.7.1",
+  "version": "3.7.2",
   "_comment_download_url": "Старый формат — один источник. Оставлен для совместимости, если download_urls не указан.",
   "download_url": "https://github.com/yourname/friend-relay/releases/download/v1.2.0/FriendRelay-1.2.0.zip",
   "_comment_download_urls": "Новый формат — список зеркал, пробуются по порядку. Можно мешать GitHub Releases, GitHub Pages, Яндекс.Диск (публичная прямая ссылка), свой сервер — что угодно по HTTP(S).",

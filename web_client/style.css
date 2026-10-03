@@ -1835,6 +1835,24 @@ body.app-on #tab-dm > .hint{flex:none}
 .railme:hover .railme-face{box-shadow:0 0 0 2px var(--accent)}
 .railme:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
+/* ── v3.7.2: кольцо «говорит» на аватарах рейла ──
+   Данные — VC.speak из моста (те же control-фреймы, что красят панель
+   «В канале»); класс вешает rail.js (railSpeakersChanged). Кольцо —
+   тот же spkRing, что у .vperson.spk в панели голоса, цвет var(--ok) —
+   подхватывается всеми темами и скинами. */
+.railava.spk .railava-face{
+  box-shadow:0 0 0 2px var(--ok);
+  animation:spkRing 1.6s var(--ease-out) infinite;
+}
+.railava.spk .railava-dot{background:var(--ok)}
+.railme.spk .railme-face{
+  box-shadow:0 0 0 2px var(--ok);
+  animation:spkRing 1.6s var(--ease-out) infinite;
+}
+@media (prefers-reduced-motion: reduce){
+  .railava.spk .railava-face,.railme.spk .railme-face{animation:none}
+}
+
 /* ── Модалки (modal.js): confirm/prompt в теме приложения ── */
 .frmodal-wrap{
   position:fixed;inset:0;z-index:270;

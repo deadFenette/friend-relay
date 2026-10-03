@@ -35,6 +35,13 @@ var VC = {
   lastUnderAt: 0,
   speak: {},           // кто говорит: {имя: bool} — control-фреймы моста
   mySpeak: false, mySil: 0,
+  /* v3.7.2: рация (PTT) + шумодав RNNoise.
+     ptt — режим включён (чекбокс); pttHold — кнопка/клавиша ЗЖАТА сейчас;
+     sentMute — что ПОСЛЕДНИМ ушли на мост ({t:mute,on:X}); null = мост ещё
+     не знает (после реконнекта отправляем заново). Итоговый мьют:
+     ptt ? !pttHold : muted. rnBytes — кеш wasm (качается один раз); */
+  ptt: false, pttHold: false, sentMute: null,
+  rnBytes: null, rnWanted: false, rnReady: false,
   wsPath: "", httpsPort: 0, statTimer: null,
   devicesGranted: false, // метки устройств доступны после разрешения
   // v3.4.1 FIX: авто-реконнект + heartbeat
@@ -542,9 +549,11 @@ function onVoiceMsg(ev){
          ненулевым навсегда, статус залипал на «переподключение…», а
          следующее предупреждение рисовало «без связи N с» со старым
          числом. */
-      if (VC.muted && VC.ws && VC.ws.readyState === 1){
-        try { VC.ws.send(JSON.stringify({t:"mute", on:true})); } catch(e){}
-      }
+      /* v3.7.2: mute уходит через applyMuteState() — там же рация (PTT).
+         sentMute=null заставляет отправить состояние заново (у нового
+         подключения моста state.muted=false). */
+      VC.sentMute = null;
+      applyMuteState();
       if (!VC.on){
         voiceStarted();          /* первый вход: строим аудио-граф */
       } else {
@@ -639,7 +648,20 @@ async function voiceStarted(){
       {numberOfInputs:1, numberOfOutputs:1, outputChannelCount:[1]});
     const sink = ctx.createGain(); sink.gain.value = 0;
     src.connect(cap); cap.connect(sink); sink.connect(ctx.destination);
-    cap.port.onmessage = (e) => { if (VC.on) pushSamples(e.data); };
+    cap.port.onmessage = (e) => {
+      /* v3.7.2: ворклет отвечает о готовности шумодава (для честного UI) */
+      if (e.data && typeof e.data === "object" && e.data.rnReady !== undefined){
+        VC.rnReady = !!e.data.rnReady;
+        syncRnUi();
+        return;
+      }
+      if (VC.on) pushSamples(e.data);
+    };
+    /* v3.7.2: шумодав RNNoise — байты wasm в ворклет (fetch там недоступен)
+       и флаг вкл/выкл по сохранённой настройке */
+    VC.rnWanted = voiceSetting("wr_rn") !== "0";   /* по умолчанию ВКЛ */
+    const rnChk = $("rnCheck"); if (rnChk) rnChk.checked = VC.rnWanted;
+    capRnApply(cap);
     const play = new AudioWorkletNode(ctx, "vc-play",
       {numberOfInputs:0, numberOfOutputs:1, outputChannelCount:[1]});
     play.port.onmessage = (e) => {
@@ -677,7 +699,9 @@ async function voiceStarted(){
   startHeartbeat();
   VC.statTimer = setInterval(voiceTick, 1000);
   voiceBtn("btnVoice", "power", "Отключиться");
-  voiceBtn("btnVoiceMute", VC.muted ? "mic-off" : "mic", "Микрофон: " + (VC.muted ? "выкл" : "вкл"));
+  /* v3.7.2: подпись кнопки — по ИТОГОВОМУ мьюту (рация может держать
+     микрофон закрытым даже при VC.muted=false) */
+  paintMuteButton();
   $("btnVoiceMute").classList.remove("hidden");
   voiceWarn("");  // очищаем предупреждение авто-переподключения
   voiceTick();
@@ -755,7 +779,10 @@ function voiceTick(){
     (VC.unders > 0 ? " · провалов " + VC.unders : "") +
     (VC.upDrops > 0 ? " · срезано отправлено " + VC.upDrops : "") +
     (VC.hostVersion ? " · хост v" + VC.hostVersion : "") +
-    (VC.muted ? " · микрофон выкл" : "");
+    /* v3.7.2: честное состояние микрофона с учётом рации */
+    (VC.ptt
+      ? (effectiveMuted() ? " · рация — зажми V/пробел" : " · рация: ГОРИ")
+      : (VC.muted ? " · микрофон выкл" : ""));
   if (VC.oddOut > 0){
     text += " · ⚠ твои кадры не принимаются — обнови программу";
   }
@@ -778,11 +805,14 @@ function voiceTick(){
   }
 }
 function pushSamples(samples){
-  /* своя индикация «говорит» — гистерезис ~250мс, как в Qt-клиенте */
+  /* своя индикация «говорит» — гистерезис ~250мс, как в Qt-клиенте.
+     v3.7.2: сравнение по ИТОГОВОМУ мьюту (рация держит микрофон
+     закрытым даже при VC.muted=false — кольцо не должно гореть). */
+  const effMuted = effectiveMuted();
   let acc = 0;
   for (let i = 0; i < samples.length; i++) acc += samples[i] * samples[i];
   const rms = Math.sqrt(acc / samples.length) * 32768;
-  if (!VC.muted && rms > 300){
+  if (!effMuted && rms > 300){
     VC.mySil = 0;
     if (!VC.mySpeak){ VC.mySpeak = true; renderVoicePeople(); }
     /* v3.6.8: живой голос с микрофона виден — сторож тишины отбой */
@@ -902,10 +932,13 @@ function renderVoicePeople(){
         "подключиться к голосовому каналу (в приложении или тут, во вкладке " +
         "«Голос»)</div>"
       : "";
+    /* v3.7.2: рейл тоже чистим (все вышли из канала) */
+    if (typeof railSpeakersChanged === "function") railSpeakersChanged();
     return;
   }
   box.innerHTML = "";
   for (const n of names){
+    /* v3.7.2: своё кольцо — по итоговому мьюту (рация считается) */
     const on = !!VC.speak[n] || (n === S.name && VC.mySpeak);
     const row = document.createElement("div");
     row.className = "vperson" + (on ? " spk" : "");
@@ -919,13 +952,17 @@ function renderVoicePeople(){
     nm.className = "vname";
     nm.textContent = n + (n === S.name ? " (ты)" : "");
     const mic = document.createElement("span");
-    mic.className = "vmic " + (on ? "on" : (n === S.name && VC.muted ? "mut" : "idle"));
-    mic.title = on ? "говорит" : (n === S.name && VC.muted ? "микрофон выключен" : "в канале");
+    const myMute = (n === S.name) ? effectiveMuted() : false;
+    mic.className = "vmic " + (on ? "on" : (myMute ? "mut" : "idle"));
+    mic.title = on ? "говорит" : (myMute ? "микрофон выключен" : "в канале");
     /* v3.2: эмодзи 🎙/🔇/🟢 → монолайн-иконки из спрайта */
-    mic.appendChild(frIcon(on ? "mic" : ((n === S.name && VC.muted) ? "mic-off" : "circle")));
+    mic.appendChild(frIcon(on ? "mic" : (myMute ? "mic-off" : "circle")));
     row.appendChild(av); row.appendChild(nm); row.appendChild(mic);
     box.appendChild(row);
   }
+  /* v3.7.2: кольца «кто говорит» на аватарах в левом рейле — люди
+     смотрят в чат, а не в панель голоса; данные те же (VC.speak) */
+  if (typeof railSpeakersChanged === "function") railSpeakersChanged();
 }
 function disconnectVoice(){
   VC.intentionalDisconnect = true;  // запрещаем авто-реконнект
@@ -958,6 +995,10 @@ function disconnectVoice(){
   /* v3.5.6: джиттер-буфер сбрасываем к стартовым 80мс (было 8=160мс —
      после переподключения канал навсегда начинал с двойной задержки). */
   VC.jitterTarget = 4; VC.speak = {}; VC.mySpeak = false; VC.mySil = 0;
+  /* v3.7.2: рация сбрасывается (клавиша могла остаться зажатой при обрыве),
+     состояние мьюта моста — забыто (новое подключение расскажет заново);
+     готовность шумодава — привязана к аудио-графу, тоже заново */
+  VC.pttHold = false; VC.sentMute = null; VC.rnReady = false;
   VC.wsGoneAt = 0; VC.lastInboundAt = 0;   /* v3.5.5: liveness-часы тоже */
   /* v3.6.8: сторож тишины микрофона — на новую сессию заново */
   VC.micVoiceSeen = false; VC.micHintShown = false;
@@ -970,14 +1011,174 @@ function disconnectVoice(){
   voiceWarn("");
 }
 $("btnVoice").onclick = () => { if (VC.on) disconnectVoice(); else connectVoice(); };
+/* v3.7.2: кнопка микрофона.
+   Обычный режим — клик = вкл/выкл (как раньше).
+   Рация (PTT) — УДЕРЖАНИЕ кнопки говорит (pointer), короткий клик ничего
+   не делает (иначе случайный тап открывал бы микрофон навсегда). */
 $("btnVoiceMute").onclick = () => {
-  if (!VC.on || !VC.ws) return;
+  if (!VC.on || !VC.ws || VC.ptt) return;   /* в рации кнопка — «держи и говори» */
   VC.muted = !VC.muted;
-  voiceBtn("btnVoiceMute", VC.muted ? "mic-off" : "mic", "Микрофон: " + (VC.muted ? "выкл" : "вкл"));
-  try { VC.ws.send(JSON.stringify({t:"mute", on:VC.muted})); } catch(e){}
-  if (VC.muted && VC.mySpeak){ VC.mySpeak = false; renderVoicePeople(); }
+  applyMuteState();
   voiceTick();
 };
+
+/* ───────────── v3.7.2: рация (PTT) + шумодав RNNoise ─────────────
+   РАЦИЯ: микрофон закрыт по умолчанию; зажал V/Пробел (или саму кнопку
+   микрофона) — говоришь, отпустил — снова закрыт. Мьют уходит на МОСТ
+   ({t:mute}), который глушит кадры на своей стороне — как и обычная
+   кнопка «Микрофон», то есть ровно тот же механизм, что и раньше.
+   effectiveMuted() — единственная точка правды: рация ? !зажата : muted.
+
+   ШУМОДАВ: RNNoise (wasm, 126КБ) живёт прямо в захватном ворклете,
+   до батчинга 20мс-кадров — убирает вентилятор/клавиатуру/гул сильнее
+   браузерного шумодава (их можно держать вместе). fetch в ворклете нет,
+   поэтому байты качает main thread и перекладывает в порт капчера. */
+
+function effectiveMuted(){
+  return VC.ptt ? !VC.pttHold : VC.muted;
+}
+
+/* Единственная точка отправки мьюта на мост. UI красится всегда,
+   сеть — только когда состояние реально изменилось (и после
+   реконнекта: sentMute=null принудительно переотправляет). */
+function applyMuteState(){
+  const m = effectiveMuted();
+  paintMuteButton();
+  if (m === VC.sentMute) return;
+  VC.sentMute = m;
+  try {
+    if (VC.ws && VC.ws.readyState === 1)
+      VC.ws.send(JSON.stringify({t: "mute", on: m}));
+  } catch(e){}
+  /* своё кольцо «говорит» гасим сразу при закрытии микрофона */
+  if (m && VC.mySpeak){ VC.mySpeak = false; renderVoicePeople(); }
+}
+
+function paintMuteButton(){
+  const b = $("btnVoiceMute");
+  if (!b) return;
+  const m = effectiveMuted();
+  if (VC.ptt){
+    voiceBtn("btnVoiceMute", m ? "mic-off" : "mic",
+      m ? "Рация: зажми V / пробел / кнопку — говори"
+        : "Рация: говоришь (кнопка зажата)");
+  } else {
+    voiceBtn("btnVoiceMute", m ? "mic-off" : "mic",
+      "Микрофон: " + (m ? "выкл" : "вкл"));
+  }
+}
+
+function pttDown(){
+  if (!VC.ptt || !VC.on || VC.pttHold) return;
+  VC.pttHold = true;
+  applyMuteState();
+  voiceTick();
+}
+function pttUp(){
+  if (!VC.ptt || !VC.pttHold) return;
+  VC.pttHold = false;
+  applyMuteState();
+  voiceTick();
+}
+
+/* Клавиши рации: V или Пробел. Строго ВНЕ полей ввода — в инпуте
+   «v» печатает букву, пробел ставит пробел, Ctrl+V вставляет —
+   всё это не должно открывать микрофон. e.repeat игнорируем
+   (авто-повтор клавиши не должен отрывать рацию). */
+window.addEventListener("keydown", (e) => {
+  if (!VC.ptt || !VC.on || e.repeat) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA"
+            || t.tagName === "SELECT" || t.isContentEditable)) return;
+  if (e.code === "KeyV" || e.code === "Space"){
+    e.preventDefault();
+    pttDown();
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.code === "KeyV" || e.code === "Space") pttUp();
+});
+/* Окно потеряло фокус / вкладка ушла — клавиша могла «залипнуть»:
+   глушим, чтобы не вещать в канал бесконечно. */
+window.addEventListener("blur", () => pttUp());
+
+/* Удержание кнопки микрофона = рация без клавиатуры (мобилки). */
+$("btnVoiceMute").addEventListener("pointerdown", (e) => {
+  if (!VC.ptt || !VC.on) return;
+  e.preventDefault();
+  pttDown();
+});
+["pointerup", "pointerleave", "pointercancel"]
+  .forEach((ev) => $("btnVoiceMute").addEventListener(ev, () => pttUp()));
+
+$("pttCheck").onchange = () => {
+  VC.ptt = $("pttCheck").checked;
+  voiceSetting("wr_ptt", VC.ptt ? "1" : "0");
+  /* Выключил рацию — микрофон становится открытым (как и ожидает
+     «обычный режим»: тут мьют только по кнопке). Включил — закрыт
+     до зажатия. Переходы делает applyMuteState. */
+  VC.muted = false;
+  applyMuteState();
+  voiceTick();
+};
+
+/* ── шумодав RNNoise: доставка wasm в ворклет + тумблер ── */
+async function rnLoadBytes(){
+  if (VC.rnBytes) return VC.rnBytes;
+  try {
+    const r = await fetch("/static/rnnoise.wasm");
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    VC.rnBytes = buf;
+    return buf;
+  } catch(e){ return null; }
+}
+async function capRnApply(capNode){
+  const cap = capNode || VC.capNode;
+  if (!cap || !cap.port) return;
+  try { cap.port.postMessage({rn: !!VC.rnWanted}); } catch(e){}
+  if (!VC.rnWanted) return;
+  const bytes = await rnLoadBytes();
+  if (!bytes || !VC.on){
+    syncRnUi();
+    return;   /* wasm недоступен — честно живём без шумодава */
+  }
+  try { cap.port.postMessage({wasm: bytes.slice(0)}); } catch(e){
+    /* клон обязателен: VC.rnBytes должен остаться живым для следующего
+       подключения (structured clone копирует — transfer бы отсоединил) */
+    try { cap.port.postMessage({wasm: bytes}); } catch(e2){}
+  }
+}
+function syncRnUi(){
+  const chk = $("rnCheck");
+  if (!chk) return;
+  const st = $("rnState");
+  /* Готово → просто рисуем состояние. Просили, но не готово → серым
+     с честным тултипом (файл не докачался/браузер без wasm). */
+  chk.disabled = !VC.rnReady;
+  chk.title = VC.rnReady
+    ? "RNNoise убирает вентилятор, клавиатуру и гул — работает вместе с браузерным шумодавом"
+    : "шумодав недоступен (не загрузился) — голос идёт без него";
+  if (!VC.rnReady) chk.checked = false;
+  if (st) st.textContent = VC.rnReady ? "· готов" : "";
+}
+$("rnCheck").onchange = () => {
+  VC.rnWanted = $("rnCheck").checked;
+  voiceSetting("wr_rn", VC.rnWanted ? "1" : "0");
+  capRnApply();
+};
+/* восстановление сохранённых режимов при загрузке страницы (до
+   подключения): рация — сразу влияет на состояние после ok моста */
+(function restoreVoiceModes(){
+  try {
+    VC.ptt = voiceSetting("wr_ptt") === "1";
+    const pc = $("pttCheck"); if (pc) pc.checked = VC.ptt;
+    VC.rnWanted = voiceSetting("wr_rn") !== "0";
+    const rc = $("rnCheck");
+    if (rc){ rc.checked = VC.rnWanted; rc.disabled = true; }
+  } catch(e){}
+})();
 /* ───────────────── v2.0.2: проверка микрофона (послушать себя) ─────────────────
    Локальная запись 5 секунд БЕЗ сервера: пользователь говорит, потом слушает
    себя и получает вердикт «тишина / норма / перегруз» — та же тройка, что в

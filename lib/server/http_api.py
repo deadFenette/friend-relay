@@ -815,11 +815,14 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         # библиотеки из web_client/). Только имя файла, никаких подпутей.
         # v1.8.2: клиент разбит на модули — сюда добавился style.css
         # (text/css), раньше отдавались только .js.
+        # v3.7.2: .wasm для шумодава RNNoise в аудио-ворклете
+        # (application/wasm — правильный mime разрешает streaming-компиляцию).
         name = parsed.path[len("/static/"):]
         ext = Path(name).suffix.lower()
         mime = {
             ".js": "application/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8",
+            ".wasm": "application/wasm",
         }.get(ext)
         if (not name or "/" in name or "\\" in name or ".." in name
                 or mime is None):

@@ -33,6 +33,31 @@ const RAIL = {
   myAvatarTried: false,
 };
 
+/* ── v3.7.2: КОЛЬЦА «КТО ГОВОРИТ» на аватарах рейла ──
+   Данные — те же VC.speak (control-фреймы моста spk/spk_all), что и в
+   панели «В канале»; своё кольцо — VC.mySpeak (локальный VAD). Классы
+   переключаем НА МЕСТЕ (без перестройки списка): переходы «говорит/
+   замолчал» редкие, а фокус/ховеры не сбиваются. voice.js дёргает
+   railSpeakersChanged() из renderVoicePeople(). */
+function applySpeaking(){
+  const tabs = document.querySelector("#app .tabs");
+  if (!tabs) return;
+  const speak = (typeof VC !== "undefined" && VC && VC.speak) ? VC.speak : {};
+  tabs.querySelectorAll(".railava[data-name]").forEach((b) => {
+    const on = !!speak[b.getAttribute("data-name")];
+    b.classList.toggle("spk", on);
+    b.title = on
+      ? b.getAttribute("data-display") + " — ГОВОРИТ\nЛичное сообщение"
+      : b.getAttribute("data-display")
+        + (b.classList.contains("on") ? " — в сети" : " — не в сети")
+        + "\nЛичное сообщение";
+  });
+  const me = tabs.querySelector(".railme");
+  if (me) me.classList.toggle("spk",
+    !!(typeof VC !== "undefined" && VC && VC.mySpeak));
+}
+window.railSpeakersChanged = applySpeaking;
+
 /* ── собрать список людей: друзья + все онлайн, без дублей ──
    Друзья идут первыми, потом остальные онлайн-участники (им тоже
    можно написать — это приватная сеть друзей). Себя не показываем. */
@@ -143,6 +168,9 @@ function render(){
       const b = document.createElement("button");
       b.type = "button";
       b.className = "railava" + (p.online ? " on" : "");
+      /* v3.7.2: data-name/data-display — applySpeaking() ищет по ним */
+      b.setAttribute("data-name", p.name);
+      b.setAttribute("data-display", p.display);
       b.title = p.display + (p.online ? " — в сети" : " — не в сети")
         + "\nЛичное сообщение";
       b.setAttribute("aria-label", "Написать " + p.display);
@@ -193,6 +221,10 @@ function render(){
     if (typeof activateTab === "function") activateTab("profile");
   };
   dock.appendChild(me);
+
+  /* v3.7.2: после ЛЮБОЙ перестройки (люди И док) вернуть кольца
+     говорящих — иначе свежесобранный док теряет своё кольцо */
+  applySpeaking();
 }
 
 /* ── жизненный цикл ──
