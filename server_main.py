@@ -3,6 +3,7 @@
 
     python server_main.py                     # имя/ключ из settings.json
     python server_main.py --name Емеля --port 8420
+    python server_main.py --max-file-size 1G  # лимит файла (2G, 500M, 2048 = МБ)
     python server_main.py --quiet             # совсем без баннера (systemd)
 
 ФИЛОСОФИЯ КОНСОЛИ (v3.4.0): консоль НЕМАЯ. При старте печатается короткая
@@ -32,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import secrets
 import signal
 import sys
@@ -107,6 +109,67 @@ def _resolve_admin_key(cli_value: str, data_dir: Path) -> str:
     return key
 
 
+# (v3.8.2) Человекочитаемые размеры для --max-file-size.
+# Ключи словаря — уже в нижнем регистре: и латиница, и кириллица.
+_UNITS_MB = {
+    "k": 1.0 / 1024, "kb": 1.0 / 1024, "к": 1.0 / 1024, "кб": 1.0 / 1024,
+    "m": 1.0, "mb": 1.0, "м": 1.0, "мб": 1.0,
+    "g": 1024.0, "gb": 1024.0, "г": 1024.0, "гб": 1024.0,
+    "t": 1024.0 * 1024, "tb": 1024.0 * 1024, "т": 1024.0 * 1024, "тб": 1024.0 * 1024,
+}
+
+
+def parse_size_mb(text: str) -> int:
+    """«2G» / «500M» / «1.5GB» / «2ГБ» / «2048» (голое число = МБ) → МБ.
+
+    ValueError с человеческим сообщением, если разобрать не удалось или
+    получилось меньше 1 МБ. Кириллические единицы (2ГБ, 500МБ) принимаются
+    наравне с латинскими — в консоли Windows их и набирать проще.
+    """
+    s = str(text).strip().lower().replace(" ", "").replace(",", ".")
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([a-zа-яё]*)", s)
+    if not m:
+        raise ValueError(
+            f"не понял размер «{text}» — примеры: 2G, 1.5GB, 500M, 2048")
+    value, unit = float(m.group(1)), m.group(2)
+    if unit == "":
+        mb = value  # голое число = МБ, совместимо со старым --max-mb
+    elif unit in _UNITS_MB:
+        mb = value * _UNITS_MB[unit]
+    else:
+        raise ValueError(
+            f"не знаю единицу «{unit}» в «{text}» — "
+            "используй K/КБ, M/МБ, G/ГБ или T/ТБ")
+    if mb < 1:
+        raise ValueError("минимальный лимит файла — 1 МБ")
+    return int(round(mb))
+
+
+def resolve_max_mb(cli_size: str | None, cli_mb: int | None,
+                   settings: dict) -> int:
+    """Какой лимит файла реально действует (v3.8.2).
+
+    Приоритет: --max-file-size > --max-mb (старый флаг) >
+    settings.json «max_file_size_mb» (туда пишет свой спиннер GUI-хост)
+    > 2 ГБ (DEFAULT_MAX_FILE_SIZE). ValueError — с текстом для консоли.
+    """
+    if cli_size:
+        return parse_size_mb(cli_size)
+    if cli_mb is not None:
+        if cli_mb < 1:
+            raise ValueError("--max-mb должен быть >= 1")
+        return int(cli_mb)
+    saved = settings.get("max_file_size_mb") if settings else None
+    if saved is not None:
+        try:
+            v = int(saved)
+            if v >= 1:
+                return v
+        except (TypeError, ValueError):
+            pass  # мусор в settings — тихо идём в дефолт
+    return DEFAULT_MAX_FILE_SIZE // (1024 * 1024)
+
+
 def parse_args() -> argparse.Namespace:
     settings = {}
     try:
@@ -129,8 +192,13 @@ def parse_args() -> argparse.Namespace:
                         "с любого устройства (сохраняется в "
                         "relay_data/admin_key.json, переживает рестарты; "
                         "по умолчанию генерируется)")
-    p.add_argument("--max-mb", type=int, default=DEFAULT_MAX_FILE_SIZE // (1024 * 1024),
-                   help="лимит размера файла, МБ")
+    p.add_argument("--max-file-size", default=None, metavar="РАЗМЕР",
+                   help="лимит размера файла: 2G, 1.5GB, 500M или 2048 "
+                        "(голое число — МБ; по умолчанию 2G или значение "
+                        "из settings.json)")
+    p.add_argument("--max-mb", type=int, default=None,
+                   help="лимит размера файла в МБ (старый способ; "
+                        "удобнее --max-file-size 2G)")
     p.add_argument("--bind", default=str(settings.get("server_host", "0.0.0.0") or "0.0.0.0"),
                    help="интерфейс прослушивания (по умолчанию 0.0.0.0, --bind 127.0.0.1 для локального)")
     p.add_argument("--data-dir", default="",
@@ -177,6 +245,9 @@ def print_hint(relay: RelayServer, args: argparse.Namespace, data_dir: Path,
     print(f"  Bind       : {args.bind}")
     print(f"  Порт       : {args.port} (HTTP+HTTPS) · голос: {args.port + 1} · voxel: {args.port + 2}")
     print(f"  Ключ доступа: {'установлен' if args.key else 'НЕТ — открытый сервер!'}")
+    gb = args.max_mb / 1024.0
+    print(f"  Лимит файла : {args.max_mb} МБ ({gb:.4g} ГБ)  "
+          f"— меняется --max-file-size 2G|500M|2048")
 
     _KIND = {"zerotier": "ZT✨", "tailscale": "TS✨",
              "physical": "LAN", "vpn": "VPN❗"}
@@ -229,14 +300,27 @@ def main() -> int:
     watchdog: HangWatchdog | None = None
 
     # Сохраняем настройки в settings.json для синхронизации с GUI
+    st: dict = {}
     try:
         st = load_settings() or {}
+    except Exception:
+        pass
+
+    # (v3.8.2) Лимит файла: --max-file-size > --max-mb > settings.json > 2ГБ.
+    try:
+        args.max_mb = resolve_max_mb(args.max_file_size, args.max_mb, st)
+    except ValueError as e:
+        print(f"ОШИБКА: {e}", file=sys.stderr)
+        return 2
+
+    try:
         st["name"] = args.name
         st["port"] = args.port
         st["access_key"] = args.key
         st["server_host"] = args.bind
         st["encryption_enabled"] = args.encryption
         st["secret_key"] = args.secret_key
+        st["max_file_size_mb"] = args.max_mb  # GUI-спиннер увидит то же число
         save_settings(st)
     except Exception:
         pass

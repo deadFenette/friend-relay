@@ -476,8 +476,9 @@ Persistent Routes:
     check("docs: описан фиксатор v3.5.11 (библиотека адресов + 7 фиксов)",
           "fix_vpn_zt.py" in doc and "v3.5.11" in doc
           and "Библиотека адресов" in doc)
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    check("README: есть блок «>>> v3.5.11»",
+    # (v3.8.2) README минимализирован, история — в docs/README_full.md.
+    readme = (ROOT / "docs" / "README_full.md").read_text(encoding="utf-8")
+    check("README_full: есть блок «>>> v3.5.11»",
           ">>> v3.5.11" in readme)
     vjson = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
     # (v3.6.3) было `== "3.5.11"` — тест падал на всех новых релизах.

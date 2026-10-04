@@ -174,9 +174,11 @@ check("version не ниже 3.6.3", vt >= (3, 6, 3))
 # «блок есть в истории заметок», позиция не важна.
 check("notes содержат блок v3.6.3",
       "v3.6.3" in str(ver.get("notes", "")))
-readme = (ROOT / "README.md").read_text(encoding="utf-8")
-check("README: блок «>>> v3.6.3»", ">>> v3.6.3" in readme)
-check("README: предыдущие блоки не тронуты",
+# (v3.8.2) README минимализирован, полная история переехала в
+# docs/README_full.md — исторические блоки проверяем там же, где они лежат.
+readme = (ROOT / "docs" / "README_full.md").read_text(encoding="utf-8")
+check("README_full: блок «>>> v3.6.3»", ">>> v3.6.3" in readme)
+check("README_full: предыдущие блоки не тронуты",
       ">>> v3.6.2" in readme and ">>> v3.6.1" in readme and ">>> v3.5.11" in readme)
 
 print(f"\nИтого: {PASS} OK / {FAIL} FAIL")
