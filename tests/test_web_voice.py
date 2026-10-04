@@ -183,6 +183,37 @@ def recv_ws_control(conn, timeout: float = 5.0) -> dict | None:
                 continue
 
 
+def ws_connect_auth(url: str, name: str, key: str,
+                    attempts: int = 2, **kw):
+    """(CI-fix 2) connect + auth + первый control-ответ, с ретраем.
+
+    На CI (websockets 17, медленный раннер) свежее WS-соединение изредка
+    прибивалось МЕЖДУ рукопожатием и первым send — SSLEOFError →
+    ConnectionClosedError «no close frame». Это гонка окружения
+    (TLS-туннель × нагруженный раннер), а не продукта: на локальной
+    машине сотни прогонов — ни разу. Ретрай открывает СВЕЖЕЕ соединение;
+    проверяемый факт (ok:true, имя) подтверждается на успешной попытке.
+    Обе попытки убиты — честно поднимаем AssertionError (виден в CI)."""
+    last_err: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        conn = None
+        try:
+            conn = ws_connect(url, **kw)
+            conn.send(json.dumps({"name": name, "access_key": key}))
+            return conn, recv_ws_control(conn)
+        except Exception as e:
+            last_err = e
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if attempt < attempts:
+                time.sleep(0.3)
+    raise AssertionError(
+        f"WS не подключился за {attempts} попытки (окружение?): {last_err!r}")
+
+
 def main() -> int:
     print("== Тест браузерного голоса: один порт (TLS+plain) + WS-туннель ==\n")
 
@@ -267,10 +298,11 @@ def main() -> int:
               ("соединение убито сервером до ответа" if door_slam
                else f"ans={ans!r}"))
 
-        web = ws_connect(f"wss://127.0.0.1:{base}/voice/ws",
-                         ssl=ws_ssl_ctx(), open_timeout=5)
-        web.send(json.dumps({"name": "WebGuy", "access_key": "k"}))
-        ans = recv_ws_control(web)
+        # (CI-fix 2) connect+auth через ws_connect_auth (ретрай на гонку
+        # окружения — см. докстринг хелпера)
+        web, ans = ws_connect_auth(f"wss://127.0.0.1:{base}/voice/ws",
+                                   "WebGuy", "k", ssl=ws_ssl_ctx(),
+                                   open_timeout=5)
         check("10. браузерный клиент авторизован",
               ans is not None and ans.get("ok") is True and ans.get("name") == "WebGuy")
 
@@ -361,10 +393,10 @@ def main() -> int:
         web.close()
         alice = TcpVoiceClient("127.0.0.1", mixer, "Алиса", key="k")
         alice.read_control()  # снапшот
-        listener = ws_connect(f"wss://127.0.0.1:{base}/voice/ws",
-                              ssl=ws_ssl_ctx(), open_timeout=5)
-        listener.send(json.dumps({"name": "Слушатель", "access_key": "k"}))
-        recv_ws_control(listener)
+        # (CI-fix 2) тот же ретрай для слушателя — свежее соединение
+        listener, _ = ws_connect_auth(f"wss://127.0.0.1:{base}/voice/ws",
+                                      "Слушатель", "k", ssl=ws_ssl_ctx(),
+                                      open_timeout=5)
         alice.send_voice(12)                        # голос ~120мс
         alice.send_voice(25, flags=_FLAG_SILENCE)   # пауза с хартбитами ~250мс
         count = zero_payload = 0

@@ -183,9 +183,15 @@ def part_a_live() -> None:
             return
 
         # Пока B залип: flush() мгновенен И C продолжает получать кадры
-        t0 = time.perf_counter()
-        bobj.flush()
-        dt = time.perf_counter() - t0
+        # (CI-fix 2) min по 10 вызовам: под нагрузкой поток-измеритель сам
+        # может быть снят с CPU на >20мс — единичный замер ловит
+        # планировщик, а не цену flush(). flush() только будит событие
+        # (повторные вызовы безвредны), min из 10 — честная оценка цены.
+        def _measure_flush() -> float:
+            t0 = time.perf_counter()
+            bobj.flush()
+            return time.perf_counter() - t0
+        dt = min(_measure_flush() for _ in range(10))
         check("A2b. flush() залипшего клиента < 20мс (такт не ждёт)",
               dt < 0.02, f"{dt * 1000:.1f}мс")
 

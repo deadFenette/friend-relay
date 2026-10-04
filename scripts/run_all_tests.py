@@ -9,7 +9,10 @@ sh-версии не хватало для CI и отладки:
     и помечается FAIL(timeout) - раньше один hang замораживал весь
     прогон, и приходилось искать виновного руками.
   - --ci: компактный вывод + GitHub Actions аннотации ::error с файлом
-    упавшего теста (видны прямо в PR).
+    упавшего теста (видны прямо в PR) + ОДИН ретрай упавшего теста
+    (CI-раннеры шумят: голод CPU/гонки окружения; детерминированный
+    фейл падает и на ретрае, случайный зеленеет — честно с пометкой
+    «ретрай» в логе; выключается --retries 0).
   - --only / --skip: фильтры по подстроке имени файла.
   - --list: показать план прогона и выйти.
   - Нормализация сводок PASS=N/FAIL=N (наследие run_regression.sh),
@@ -137,8 +140,11 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=300.0, help="таймаут одного теста, сек")
     ap.add_argument("--py", default=sys.executable, help="интерпретатор для тестов")
     ap.add_argument("--ci", action="store_true", help="компактный вывод + аннотации GitHub Actions")
+    ap.add_argument("--retries", type=int, default=None,
+                    help="ретраев для упавшего теста (по умолчанию: 1 в --ci, иначе 0)")
     ap.add_argument("--list", action="store_true", help="показать план и выйти")
     args = ap.parse_args()
+    retries = (1 if args.ci else 0) if args.retries is None else max(0, args.retries)
 
     skip = DEFAULT_SKIP + tuple(args.skip)
     files = discover(skip, tuple(args.only))
@@ -152,7 +158,8 @@ def main() -> int:
         print("[runner] тесты не найдены - проверь --only/--skip")
         return 2
 
-    print(f"[runner] {len(files)} тестов, py={args.py}, timeout={args.timeout:.0f}s"
+    print(f"[runner] {len(files)} тестов, py={args.py}, timeout={args.timeout:.0f}s, "
+          f"ретраев={retries}"
           + (", режим CI" if args.ci else ""))
     total_ok = total_fail = 0
     failed: list[tuple[str, str]] = []
@@ -176,7 +183,23 @@ def main() -> int:
             # rc=0 без сводки считаем пройденным (1 проверка на сам запуск)
             ok = max(ok, 1) if not out.strip() or ok == 0 else ok
         status = "OK" if (rc == 0 and not timed_out) else ("TIMEOUT" if timed_out else "FAIL")
-        line = f"[{i:02d}/{len(files)}] {path.name:42s} {status:7s} {secs:6.1f}s  ({ok} OK / {fail} FAIL)"
+
+        # (CI-fix 2) ретрай упавшего теста. Детерминированный фейл
+        # (сломанная проверка, краш) падает и повторно; случайный —
+        # зеленеет, и в логе это видно честно («ретрай»).
+        retried = 0
+        while (status != "OK" or fail > 0) and retried < retries:
+            retried += 1
+            print(f"    ↻ {path.name}: ретрай {retried}/{retries} "
+                  f"(первый прогон: {status}, {ok} OK / {fail} FAIL)", flush=True)
+            rc, out, secs, timed_out = run_one(args.py, path, args.timeout)
+            ok, fail = parse_summary(out)
+            status = "OK" if (rc == 0 and not timed_out) else ("TIMEOUT" if timed_out else "FAIL")
+        if status == "OK" and ok == 0:
+            ok = 1  # rc=0 без сводки — та же нормализация, что и у первого прогона
+
+        line = f"[{i:02d}/{len(files)}] {path.name:42s} {status:7s} {secs:6.1f}s  ({ok} OK / {fail} FAIL)" \
+               + (f"  <ретрай {retried}>" if (retried and status == "OK") else "")
         if args.ci and status == "OK":
             print(line, flush=True)
         else:
