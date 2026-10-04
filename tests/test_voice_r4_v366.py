@@ -147,7 +147,19 @@ def part_a_live() -> None:
         c = _mixer_connect(port, "С")
 
         # Зажимаем и СЕРВЕРНУЮ сторону B: kernel-буферы наполнятся за ~0.1с
-        bobj = next(x for x in mixer._clients if x.name == "В_Залип")
+        # (v3.8.1) accept-поток миксера регистрирует клиента АСИНХРОННО:
+        # мгновенный next() при загруженной машине ловил StopIteration
+        # (флаки в полном регрессе при изолированно зелёном прогоне).
+        # Ждём появления клиента до 5с.
+        bobj = None
+        for _ in range(100):
+            bobj = next((x for x in mixer._clients if x.name == "В_Залип"), None)
+            if bobj is not None:
+                break
+            time.sleep(0.05)
+        if bobj is None:
+            check("A2. клиент В_Залип зарегистрирован миксером", False)
+            return
         bobj.conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4608)
 
         ca = [0]; cc = [0]

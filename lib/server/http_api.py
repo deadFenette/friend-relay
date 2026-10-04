@@ -200,7 +200,14 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            # (v3.8.1) клиент уже ушёл (таймаут/обрыв/грязный тест) - писать
+            # некуда. Раньше ошибка записи долетала до wrapper'а do_POST/
+            # do_GET и печатала полные трейсбэк в лог сервера на КАЖДУЮ
+            # такую попытку - стабильно заспамленный logs/ при любом обрыве.
+            pass
 
     def _sender_from_header(self, default: str = "") -> str:
         return header_decode(self.headers.get(HEADER_FROM, default) or default)
@@ -423,6 +430,12 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         t0 = time.perf_counter()  # monotonic — перевод часов не врёт
         try:
             self._do_GET_impl()
+        except (BrokenPipeError, ConnectionResetError):
+            # (v3.8.1) клиент оборвал соединение при скачивании (файл/стрим):
+            # это штатная жизнь HTTP-сервера, а не падение - раньше каждый
+            # такой обрыв печатал трейсбэк в лог. Telemetry тоже не трогаем:
+            # вины сервера тут нет.
+            log.debug("GET %s: клиент оборвал соединение", self.path)
         except Exception as e:
             # (v2.0.5) Телеметрия падений: тип исключения без стека/пути —
             # хост видит «сколько и чем» болит сервер.
@@ -452,6 +465,9 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         t0 = time.perf_counter()
         try:
             self._do_POST_impl()
+        except (BrokenPipeError, ConnectionResetError):
+            # (v3.8.1) см. do_GET - обрыв клиента не падение сервера
+            log.debug("POST %s: клиент оборвал соединение", self.path)
         except Exception as e:
             # (v2.0.5) телеметрия падений — как в do_GET
             self.relay.telemetry.record(

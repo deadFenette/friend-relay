@@ -1,0 +1,82 @@
+# Тесты и CI (v3.8.1)
+
+Как устроена проверка стабильности friend-relay: что гоняется локально,
+что гоняется в CI, и как добавлять новое.
+
+## Три слоя проверки
+
+1. **Модульные/интеграционные тесты** — `tests/test_*.py` (50+ файлов,
+   ~1600 проверок). Каждый файл — самостоятельный скрипт: сам поднимает
+   `RelayServer` на loopback (или трогает доменные классы напрямую),
+   печатает `[OK]/[FAIL]` и завершается кодом 0/1. Никаких pytest/unittest
+   фреймворков — проще запускать и читать.
+
+2. **Браузерные E2E** — `scripts/web_*_e2e.py`: Chromium (playwright),
+   фантомные сессии, реальные скриншоты. Требуют дисплей/Xvfb, поэтому в
+   CI НЕ гоняются — только локально/на машине с графическим окружением.
+
+3. **Stability-прогон** — `tests/test_stability_v381.py` (v3.8.1):
+   сервер обязан переживать грязь. Пять блоков:
+   - **A. Грязный HTTP** — мусорные байты, битый JSON, враньё в
+     Content-Length, обрыв тела, 16КБ URL, шапка-бомба: сервер жив.
+   - **B. Битый журнал** — обрезанная последняя строка, мусор в середине,
+     валидные НЕ-dict JSON-строки: загрузка без краха, seq не откатывается.
+   - **C. Гонки** — 100 параллельных сообщений (уникальность seq), микс
+     send/edit/delete без 5xx, параллельные upload, poll под нагрузкой.
+   - **D. Рестарт** — close->reopen EventStore, stop->start RelayServer:
+     данные целы, seq продолжается.
+   - **E. Границы файлов** — сервер с ключом и max_file_size=1024: 413 на
+     превышение, пустой/отрицательный Content-Length, обрыв потока без
+     .part-хвостов, враньё в sha256, мусорная подпись -> 403, честная
+     HMAC-подпись -> 200.
+
+## Авто-раннер: scripts/run_all_tests.py
+
+Кроссплатформенная замена `scripts/run_regression.sh` (sh-версия осталась
+для совместимости):
+
+```
+python scripts/run_all_tests.py              # весь headless-регресс
+python scripts/run_all_tests.py --list       # показать план прогона
+python scripts/run_all_tests.py --only voice # по подстроке имени
+python scripts/run_all_tests.py --skip stability --timeout 120
+python scripts/run_all_tests.py --ci         # компактно + аннотации GitHub
+```
+
+Что даёт:
+- **пер-тестовый таймаут** (по умолчанию 300с): зависший тест убивается с
+  пометкой TIMEOUT, а не замораживает весь прогон;
+- нормализацию сводок (`PASS=N`/`N OK`/`Итого`) в общий итог;
+- код возврата 1 при любом FAIL — годится и для CI, и для хуков;
+- `--ci`: аннотации `::error file=tests/...` видны прямо в PR.
+
+По умолчанию пропускаются тесты, требующие дисплей/аудио/Windows:
+`test_qt_*`, `test_v195_qt.py`, `test_legacy_live*` — та же политика,
+что в `run_regression.sh`.
+
+## CI: .github/workflows/ci.yml
+
+GitHub Actions: на каждый push/PR в `main` — два джобы Python 3.11 и
+3.12 на ubuntu-latest:
+
+1. `pip install urllib3 orjson cryptography numpy websockets mutagen` —
+   «полный безголовый» набор из requirements.txt БЕЗ PySide6 (GUI),
+   sounddevice (PortAudio+устройство) и opuslib_next (libopus): без них
+   приложение честно деградирует, и эти fallback-пути покрыты тестами.
+2. `python -m compileall -q lib voice scripts tests` — быстрый синтакс-гейт.
+3. `python scripts/run_all_tests.py --ci` — весь headless-регресс,
+   включая stability-прогон.
+
+Ветка в бейдже README: статус последнего прогона main.
+
+## Как добавлять тест
+
+- Новый файл `tests/test_<тема>_v<версия>.py`, стиль — как в
+  `test_stability_v381.py`/`test_convenience_v380.py`: `check(name, cond)`,
+  счётчики PASS/FAIL, `main() -> int`, `sys.exit(1) if FAIL`.
+- Поднимайте сервер на свободном порту (`free_port()` из stability-теста),
+  а не на «магических числах» — иначе конфликты с остаточными процессами.
+- Раннер подхватит файл автоматически (glob `tests/test_*.py`) —
+  ничего регистрировать не нужно.
+- Тест НЕ должен требовать дисплей/аудио — иначе пометьте его в
+  DEFAULT_SKIP раннера и в skip-списке run_regression.sh.

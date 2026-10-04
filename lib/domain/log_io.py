@@ -28,9 +28,14 @@ def load_history(history_path: Path, limit: int | None = None) -> list[dict]:
                 continue
             try:
                 ev = json.loads(line)
-                events.append(ev)
             except json.JSONDecodeError:
                 continue
+            # (v3.8.1) Валидный JSON может быть и НЕ объектом (5, "x", [],
+            # null - после ручной починки/склейки файлов). Раньше такая
+            # строка доезжала до ev.get(...) и роняла старт сервера
+            # AttributeError'ом. Честно пропускаем, как и битые строки.
+            if isinstance(ev, dict):
+                events.append(ev)
 
     if limit is not None and len(events) > limit:
         return events[-limit:]
@@ -60,13 +65,17 @@ def load_history_before(history_path: Path, before_seq: int, count: int = 50) ->
                 continue
             try:
                 ev = json.loads(line)
-                seq = ev.get("seq", 0)
-                if seq < before_seq:
-                    events.append(ev)
-                    if len(events) >= count:
-                        break
             except json.JSONDecodeError:
                 continue
+            # (v3.8.1) НЕ-dict строка раньше падала AttributeError'ом прямо
+            # в поллинге /events - см. комментарий в load_history.
+            if not isinstance(ev, dict):
+                continue
+            seq = ev.get("seq", 0)
+            if seq < before_seq:
+                events.append(ev)
+                if len(events) >= count:
+                    break
 
     # events уже в обратном порядке (от новых к старым) из-за reversed
     return events

@@ -1,5 +1,7 @@
 # Friend Relay
 
+[![tests](https://github.com/deadFenette/friend-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/deadFenette/friend-relay/actions/workflows/ci.yml)
+
 FRIEND RELAY — АКТУАЛЬНАЯ АРХИТЕКТУРА
 ========================================
 
@@ -16,6 +18,11 @@ FRIEND RELAY — АКТУАЛЬНАЯ АРХИТЕКТУРА
 >>> Дерево папок с пояснениями — раздел «СТРУКТУРА ПРОЕКТА» ниже.
 
 >>> v3.8.0 — ПАК УДОБСТВ: поиск по всей истории, drag&drop файлов,
+>>> v3.8.1 — СТАБИЛЬНОСТЬ: авто-раннер всех тестов
+>>> (scripts/run_all_tests.py), новый stability-прогон
+>>> (tests/test_stability_v381.py: грязный HTTP, битый журнал,
+>>> гонки, рестарт, границы файлов) и CI (GitHub Actions,
+>>> Python 3.11/3.12). Подробности — docs/TESTING_CI_v3.8.1.md.
 >>> ОС-уведомления. Подробности — docs/CONVENIENCE_v3.8.0.md.
 >>>   • ПОИСК ПО ИСТОРИИ (общий чат + все каналы): новая кнопка-лупа в
 >>>     шапке чата открывает панель поиска — сервер ищет GET'ом /search
