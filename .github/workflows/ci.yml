@@ -1,0 +1,52 @@
+# Friend Relay CI (v3.8.1)
+#
+# Каждый push/PR прогоняет headless-регресс: все tests/test_*.py, не
+# требующие дисплея/аудио/Windows (Qt-рендер тесты пропускаются, как и
+# в scripts/run_regression.sh). Тот же раннер, что и локально:
+#   python scripts/run_all_tests.py --ci
+#
+# Набор зависимостей - «полный безголовый»: всё из requirements.txt,
+# КРОМЕ PySide6 (GUI, огромный и не нужен в headless), sounddevice
+# (нужен системный PortAudio + аудиоустройство) и opuslib_next (нужен
+# системный libopus). Приложение и тесты умеют работать без них
+# (fallback-пути покрыты тестами).
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies (headless set)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install urllib3 orjson cryptography numpy websockets mutagen
+
+      - name: Syntax check (compileall)
+        run: python -m compileall -q lib voice scripts tests
+
+      - name: Run test suite
+        run: python scripts/run_all_tests.py --ci
