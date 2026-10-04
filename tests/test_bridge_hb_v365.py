@@ -13,6 +13,15 @@
 Фикс v3.6.5: общий asyncio.Lock на отправку в обеих насос-тасках + все
 контрольные кадры моста (hb-echo, keepalive) шлются str (текстовый кадр).
 
+CI-fix (v3.8.2): на медленном раннере GitHub Actions тест один раз упал.
+Точные причины два: гонки на жёстких окнах 1.5-2.0с и голый краш пробы,
+если сервер закрыл соединение (ConnectionClosed не ловился в drain).
+Харденинг: окна расширены (3-6с), добавлены РАННИЕ ВЫХОДЫ из drain
+(на быстрой машине тест быстрее прежнего), drain ловит закрытие
+соединения как событие (а не исключение), краш пробы превращается в
+FAIL с трейсбеком (видно в логе CI), старт сервера ретраится на новом
+порту. Пороги и семантика всех проверок НЕ изменены.
+
 Проверки здесь:
   A. Живой сервер (RelayServer целиком, как в бою):
      1) auth→ok, spk_all, roster приходят ТЕКСТОМ;
@@ -92,7 +101,13 @@ async def ws_probe(base: int, key: str, version: str) -> None:
                     return
                 await asyncio.sleep(0.02)
 
-        async def drain(until: float, want_binary: bool) -> None:
+        async def drain(until: float, want_binary: bool = False,
+                        stop_when=None) -> None:
+            """Читает WS до дедлайна ИЛИ до stop_when() (ранний выход —
+            на быстрой машине не ждём весь таймаут зря).
+            (CI-fix) ConnectionClosed/OSError = сервер закрыл соединение:
+            это СОБЫТИЕ (фиксируем и выходим), а не исключение, убивающее
+            пробу без диагностики."""
             nonlocal binary
             while time.monotonic() < until:
                 try:
@@ -100,6 +115,11 @@ async def ws_probe(base: int, key: str, version: str) -> None:
                                                  timeout=max(0.05, until - time.monotonic()))
                 except asyncio.TimeoutError:
                     continue
+                except Exception as e:
+                    # ConnectionClosed (websockets >=13 не подкласс
+                    # ConnectionError) и пр. — соединение закрыто сервером.
+                    print(f"    (соединение закрыто: {e!r})")
+                    return
                 if isinstance(msg, str):
                     try:
                         texts.append(json.loads(msg))
@@ -107,10 +127,16 @@ async def ws_probe(base: int, key: str, version: str) -> None:
                         pass
                 elif want_binary:
                     binary += 1
+                if stop_when is not None and stop_when():
+                    return
 
-        # 1) auth → ok
+        # 1) auth → ok. (CI-fix) окно 1.5с → 3с, ранний выход по roster
+        #    (он приходит ПОСЛЕДНИМ: ok, затем буферизованные spk_all/roster)
         await ws.send(json.dumps({"name": "ВебТест", "access_key": key}))
-        await drain(time.monotonic() + 1.5, False)
+        await drain(time.monotonic() + 3.0, False,
+                    stop_when=lambda: any(
+                        j.get("t") == "roster" and "ВебТест" in j.get("names", [])
+                        for j in texts))
         ok_msg = next((j for j in texts if j.get("ok")), None)
         check("1. auth→ok приходит ТЕКСТОМ", ok_msg is not None)
         spk = next((j for j in texts if j.get("t") == "spk_all"), None)
@@ -122,10 +148,13 @@ async def ws_probe(base: int, key: str, version: str) -> None:
               any(j.get("t") == "roster" and "ВебТест" in j.get("names", [])
                   for j in texts))
 
-        # 2) hb-echo БЕЗ аудио — текст, ts эхом
+        # 2) hb-echo БЕЗ аудио — текст, ts эхом (окно 1.5с → 3с + ранний выход)
         texts.clear()
         await ws.send(json.dumps({"t": "hb", "ts": 777}))
-        await drain(time.monotonic() + 1.5, False)
+        await drain(time.monotonic() + 3.0, False,
+                    stop_when=lambda: any(
+                        j.get("t") == "hb" and j.get("ok") and j.get("ts") == 777
+                        for j in texts))
         echo = next((j for j in texts
                      if j.get("t") == "hb" and j.get("ok")), None)
         check("4. hb-echo — ТЕКСТ с ok:true и ts=777",
@@ -139,7 +168,14 @@ async def ws_probe(base: int, key: str, version: str) -> None:
         task = asyncio.create_task(sender())
         await asyncio.sleep(1.0)          # PCM-поток уже идёт
         await ws.send(json.dumps({"t": "hb", "ts": 888}))
-        await drain(time.monotonic() + 2.0, True)
+        # (CI-fix) окно 2с → 6с + ранний выход: echo пришёл И кадров уже
+        # >= 30 (порог проверки 20 — берём запас). Локально 151 кадр/3с,
+        # ранний выход срабатывает за ~0.7с; на голодном раннере окно
+        # растягивается до 6с, вместо того чтобы срезаться на 2с.
+        await drain(time.monotonic() + 6.0, True,
+                    stop_when=lambda: binary >= 30 and any(
+                        j.get("t") == "hb" and j.get("ok") and j.get("ts") == 888
+                        for j in texts))
         stop = True
         try:
             await asyncio.wait_for(task, 2)
@@ -158,7 +194,11 @@ async def ws_probe(base: int, key: str, version: str) -> None:
         await ws.send("это не json {{{")
         await ws.send(json.dumps({"t": "mute", "on": True}))
         await ws.send(json.dumps({"t": "ping", "id": 999}))
-        await drain(time.monotonic() + 2.0, False)
+        # (CI-fix) окно 2с → 4с + ранний выход по pong
+        await drain(time.monotonic() + 4.0, False,
+                    stop_when=lambda: any(
+                        j.get("t") == "pong" and j.get("id") == 999
+                        for j in texts))
         pong = next((j for j in texts
                      if j.get("t") == "pong" and j.get("id") == 999), None)
         check("7. mute+мусор не рвут мост; ping→pong от микшера (v3.6.6)",
@@ -190,16 +230,29 @@ def main() -> int:
     import websockets  # noqa: F401 — ранний фейл, если библиотеки нет
     source_checks()
 
-    base = free_port()
+    # (CI-fix) ретрай старта на свежем порту: гонка TOCTOU у free_port
+    relay = None
+    base = 0
     with tempfile.TemporaryDirectory(prefix="fr_bridge_hb_") as tmp:
         from lib.relay_server import RelayServer
-        relay = RelayServer(Path(tmp), host_name="Хост",
-                            access_key="k3", max_file_size=1024 * 1024)
-        if not relay.start("127.0.0.1", base):
-            check("сервер стартовал", False, "порт занят?")
+        for _attempt in (1, 2):
+            base = free_port()
+            relay = RelayServer(Path(tmp), host_name="Хост",
+                                access_key="k3", max_file_size=1024 * 1024)
+            if relay.start("127.0.0.1", base):
+                break
+            relay = None
+        if relay is None:
+            check("сервер стартовал", False, "порт занят? (2 попытки)")
             return _summary()
         try:
+            # (CI-fix) краш пробы превращаем в именованный FAIL с
+            # трейсбеком: в логе CI видно ГДЕ и ПОЧЕМУ, а не просто rc=1
             asyncio.run(ws_probe(base, "k3", version))
+        except Exception:
+            import traceback
+            check("ws-проба выполнена без исключений", False,
+                  traceback.format_exc(limit=3).replace("\n", " | "))
         finally:
             relay.stop()
     return _summary()
