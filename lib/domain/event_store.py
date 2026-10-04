@@ -79,9 +79,8 @@ class EventStore:
         self._deleted_seqs: set = set()  # seq, помеченные удалёнными
         self._file_index: dict[str, dict] = {}  # file_id -> event dict
         self._next_seq = 1
-        self._history_fp = open(
-            self.history_path, "a", encoding="utf-8", buffering=1
-        )  # line-buffered
+        self._history_fp = None  # (v3.8.3) открывается через _open_history_fp()
+        self._open_history_fp()
         self._cache_limit = cache_limit
         self._load_history()
 
@@ -324,13 +323,44 @@ class EventStore:
                 for delta in deltas[seq]:
                     self.apply_delta(ev, delta)
 
+    def _open_history_fp(self) -> None:
+        """(v3.8.3) Журнал истории открыт на дозапись — или открываем.
+
+        Раньше файл открывался только в __init__, а close() обнулял
+        дескриптор без пути назад: stop() → start() на том же RelayServer
+        (сценарий «сервер перезапустился», пойман soak-тестом v3.8.3)
+        оставлял _history_fp = None, и ЛЮБОЕ новое событие падало с 500,
+        пока процесс не перезапустят целиком. Теперь журнал лениво
+        переоткрывается при первой записи после close()."""
+        if self._history_fp is None:
+            self._history_fp = open(
+                self.history_path, "a", encoding="utf-8", buffering=1
+            )  # line-buffered
+
     def _append_event(self, ev: dict) -> None:
         # (v2.0.2) json_fast: тот же формат строки (ensure_ascii=False),
         # но сериализация в 5-10 раз быстрее при orjson. Каждое сообщение
         # проходит здесь синхронно под локом — каждый мс задержки держит
         # очередь поллингов.
-        self._history_fp.write(dumps_str(ev) + "\n")
-        self._history_fp.flush()
+        line = dumps_str(ev) + "\n"
+        for attempt in (0, 1):
+            self._open_history_fp()
+            try:
+                self._history_fp.write(line)
+                self._history_fp.flush()
+                return
+            except OSError:
+                # (v3.8.3) дескриптор вдруг стал невалидным (диск/антивирус/
+                # ротация извне) — закрываем и на втором проходе переоткрываем;
+                # вторая неудача честно уходит наверх (HTTP 500 у клиента)
+                try:
+                    if self._history_fp is not None:
+                        self._history_fp.close()
+                except OSError:
+                    pass
+                self._history_fp = None
+                if attempt:
+                    raise
 
     def _cache_append(self, ev: dict) -> None:
         """(v2.0.2) Единственная точка добавления события в in-memory кеш.

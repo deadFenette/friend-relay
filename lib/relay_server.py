@@ -1221,6 +1221,17 @@ class RelayServer:
             pass
         if self._httpd is not None:
             self._httpd.shutdown()
+            # (v3.8.3) закрываем ЖИВЫЕ клиентские сокеты (keep-alive, WS-туннели
+            # голоса): без этого клиенты висят в полузакрытых сокетах до
+            # TCP-таймаута и не знают, что сервер остановлен («зомби-
+            # соединение», поймано soak-тестом v3.8.3)
+            try:
+                n_zombie = self._httpd.close_active_connections()
+                if n_zombie:
+                    get_logger().info(
+                        "остановка: закрыто активных соединений: %d", n_zombie)
+            except Exception:
+                pass
             self._httpd.server_close()
             self._httpd = None
         self._thread = None

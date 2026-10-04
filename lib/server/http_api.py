@@ -2171,6 +2171,12 @@ class QueuedHTTPServer(ThreadingHTTPServer):
     def __init__(self, handler_class, in_queue):
         self._in_queue = in_queue
         self._stop_event = threading.Event()
+        # (v3.8.3) реестр ЖИВЫХ клиентских сокетов: при остановке сервера
+        # их нужно принудительно закрыть — иначе keep-alive/WS-туннели
+        # остаются полузакрытыми: клиент шлёт в чёрную дыру и висит до
+        # TCP-таймаута («зомби-соединение», поймано soak-тестом v3.8.3).
+        self._active_conns: set = set()
+        self._conns_lock = threading.Lock()
         super().__init__(None, handler_class, bind_and_activate=False)
 
     def server_bind(self):  # слушатель принадлежит мультиплексору
@@ -2198,6 +2204,45 @@ class QueuedHTTPServer(ThreadingHTTPServer):
 
     def shutdown(self):
         self._stop_event.set()
+
+    def process_request(self, request, client_address):
+        # (v3.8.3) сокет уходит в реестр до запуска потока-обработчика
+        with self._conns_lock:
+            self._active_conns.add(request)
+        super().process_request(request, client_address)
+
+    def shutdown_request(self, request):
+        try:
+            super().shutdown_request(request)
+        finally:
+            with self._conns_lock:
+                self._active_conns.discard(request)
+
+    def close_active_connections(self) -> int:
+        """(v3.8.3) Грубо закрыть все живые клиентские сокеты.
+
+        Вызывается из RelayServer.stop(): REST-клиенты с keep-alive и
+        голосовые WS-туннели иначе не узнают об остановке — их recv/send
+        молча висят, пока не сработает TCP-таймаут (десятки секунд).
+        Принудительный shutdown будит потоки-обработчики и даёт клиентам
+        мгновенный разрыв → их авто-реконнект срабатывает сразу.
+        Возвращает число закрытых сокетов (для лога)."""
+        with self._conns_lock:
+            conns = list(self._active_conns)
+        closed = 0
+        for c in conns:
+            try:
+                c.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                c.close()
+                closed += 1
+            except OSError:
+                pass
+        with self._conns_lock:
+            self._active_conns.clear()
+        return closed
 
     def server_close(self):
         pass  # не закрываем чужой слушающий сокет

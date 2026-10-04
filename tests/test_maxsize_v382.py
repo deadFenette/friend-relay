@@ -202,7 +202,10 @@ def test_g_structural() -> None:
           ">>> v3.6.3" in full and ">>> v3.5.11" in full)
 
     ver = json.loads((root / "version.json").read_text(encoding="utf-8"))
-    check("version.json == 3.8.2", ver.get("version") == "3.8.2")
+    # (v3.8.3) «не ниже», а не «==»: тесты переживают бампы (принцип
+    # test_fix_v363), иначе каждый релиз красил чужой тест
+    vt = tuple(int(x) for x in str(ver.get("version", "0")).split(".")[:3])
+    check("version.json не ниже 3.8.2", vt >= (3, 8, 2))
 
 
 def main() -> int:
