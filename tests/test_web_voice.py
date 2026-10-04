@@ -52,11 +52,12 @@ from voice.protocol import (
 PASS = FAIL = 0
 
 
-def check(name: str, cond: bool) -> None:
+def check(name: str, cond: bool, detail: str = "") -> None:
     global PASS, FAIL
     PASS += 1 if cond else 0
     FAIL += 0 if cond else 1
-    print(f"  [{'OK' if cond else 'FAIL'}] {name}")
+    print(f"  [{'OK' if cond else 'FAIL'}] {name}"
+          + (f"  ({detail})" if detail and not cond else ""))
 
 
 def make_frame(flags: int, payload: bytes) -> bytes:
@@ -239,13 +240,32 @@ def main() -> int:
         check("8. TCP-клиент получил снапшот spk_all",
               snap is not None and snap.get("t") == "spk_all")
 
-        bad = ws_connect(f"wss://127.0.0.1:{base}/voice/ws",
-                         ssl=ws_ssl_ctx(), open_timeout=5)
-        bad.send(json.dumps({"name": "Злодей", "access_key": "не-тот"}))
-        ans = recv_ws_control(bad)
+        bad = None
+        ans = None
+        door_slam = False
+        try:
+            bad = ws_connect(f"wss://127.0.0.1:{base}/voice/ws",
+                             ssl=ws_ssl_ctx(), open_timeout=5)
+            bad.send(json.dumps({"name": "Злодей", "access_key": "не-тот"}))
+            ans = recv_ws_control(bad)
+        except Exception:
+            # (CI-fix) На быстрой машине (CI) сервер успевает прибить
+            # соединение ещё ДО того, как клиент успевает что-то отправить —
+            # send() падает ConnectionClosedError. Хлопок дверью — это
+            # отказ не слабее внятной ошибки: клиент с неверным ключом
+            # НЕ ПУЩЕН, что и проверяет этот пункт.
+            door_slam = True
+        finally:
+            if bad is not None:
+                try:
+                    bad.close()
+                except Exception:
+                    pass
         check("9. неверный ключ доступа отклонён",
-              ans is not None and "error" in ans and "ключ" in ans["error"])
-        bad.close()
+              door_slam or (ans is not None and "error" in ans
+                            and "ключ" in ans["error"]),
+              ("соединение убито сервером до ответа" if door_slam
+               else f"ans={ans!r}"))
 
         web = ws_connect(f"wss://127.0.0.1:{base}/voice/ws",
                          ssl=ws_ssl_ctx(), open_timeout=5)

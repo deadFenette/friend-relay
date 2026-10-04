@@ -18,6 +18,11 @@ sh-версии не хватало для CI и отладки:
 По умолчанию пропускаются тесты, требующие дисплей/аудио/Windows
 (qt_*, test_v195_qt, test_legacy_live*) - как в run_regression.sh.
 
+Тесты из TEST_NEEDS требуют зависимости СВЕРХ безголового набора CI
+(например playwright с браузером): если модуля нет в этом интерпретаторе,
+тест помечается SKIP (не FAIL, не считается упавшим) - CI остаётся быстрым
+и детерминированным, а тяжёлые браузерные E2E гоняются локально/на релизе.
+
 Использование:
   python scripts/run_all_tests.py              # весь headless-регресс
   python scripts/run_all_tests.py --ci         # в GitHub Actions
@@ -41,6 +46,13 @@ TESTS_DIR = ROOT / "tests"
 # их не гоняем (та же политика, что в scripts/run_regression.sh).
 DEFAULT_SKIP = ("test_qt_", "test_v195_qt.py", "test_legacy_live")
 
+# (CI-fix) Зависимости сверх безголового набора CI: имя файла -> модули.
+# Нет модуля в этом интерпретаторе -> SKIP (прямой запуск такого теста
+# тоже должен сам завершаться 0 - см. test_web_images_v368.py).
+TEST_NEEDS = {
+    "test_web_images_v368.py": ("playwright",),
+}
+
 SUMMARY_RE = re.compile(
     r"(?:PASS=(?P<pa>\d+)|(?P<oa>\d+)\s*OK)\D*?"
     r"(?:PASS=(?P<pf>\d+)|(?P<of>\d+)\s*FAIL)?",
@@ -63,6 +75,17 @@ def parse_summary(out: str) -> tuple[int, int]:
     if ok or fail:
         return int(ok[-1]) if ok else 0, int(fail[-1]) if fail else 0
     return 0, 0
+
+
+def _module_ok(py: str, module: str) -> bool:
+    """Есть ли модуль в этом интерпретаторе (дешёвая проба без импорта)."""
+    probe = ("import importlib.util,sys; "
+             f"sys.exit(0 if importlib.util.find_spec({module!r}) else 1)")
+    try:
+        return subprocess.run([py, "-c", probe],
+                              capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def discover(skip: tuple[str, ...], only: tuple[str, ...]) -> list[Path]:
@@ -133,9 +156,20 @@ def main() -> int:
           + (", режим CI" if args.ci else ""))
     total_ok = total_fail = 0
     failed: list[tuple[str, str]] = []
+    skipped: list[tuple[str, str]] = []
     t_start = time.monotonic()
 
     for i, path in enumerate(files, 1):
+        # (CI-fix) SKIP по отсутствию зависимости (TEST_NEEDS): не запускаем
+        # и не считаем упавшим - печатаем строку со статусом SKIP.
+        needs = TEST_NEEDS.get(path.name, ())
+        missing = [m for m in needs if not _module_ok(args.py, m)]
+        if missing:
+            line = (f"[{i:02d}/{len(files)}] {path.name:42s} {'SKIP':7s} "
+                    f"{'':6s}  (нет: {', '.join(missing)})")
+            print(line, flush=True)
+            skipped.append((path.name, ", ".join(missing)))
+            continue
         rc, out, secs, timed_out = run_one(args.py, path, args.timeout)
         ok, fail = parse_summary(out)
         if rc == 0 and fail == 0 and (ok > 0 or not out.strip()):
@@ -161,9 +195,12 @@ def main() -> int:
     wall = time.monotonic() - t_start
     print("=" * 70)
     print(f"ИТОГО: {total_ok} OK / {total_fail} FAIL за {wall:.0f}с; "
-          f"упавших файлов: {len(failed)}")
+          f"упавших файлов: {len(failed)}"
+          + (f"; пропущено (нет зависимостей): {len(skipped)}" if skipped else ""))
     for name, why in failed:
         print(f"  - {name}: {why}")
+    for name, why in skipped:
+        print(f"  [SKIP] {name}: нет {why}")
     return 1 if failed else 0
 
 
