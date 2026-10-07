@@ -1,18 +1,17 @@
-"""CommandPalette — ТЗ docs/DESIGN_STYLE.md, раздел 9 («Command Palette»).
+"""CommandPalette — spotlight-оверлей с поиском по всему приложению.
 
-«Ctrl+K opens a spotlight-style overlay (blurred backdrop). Search across
-spaces, DMs, settings, actions. This is the primary power-user tool».
+Вызывается по Ctrl+K: затемнённая подложка, карточка поиска поверх всего
+окна. Ищет по разделам, ЛС, настройкам и действиям — основной инструмент
+опытного пользователя.
 
 Spotlight-оверлей поверх всего окна:
   - затемнённый фон rgba(11,11,15,0.72) (настоящий blur-behind на QWidget
-    без QML/WebEngine не даётся — ТЗ раздел 3 запрещает WebEngine, поэтому
-    используем translucent-подложку, как разрешает раздел 6.4);
+    без QML/WebEngine не даётся, поэтому используем translucent-подложку);
   - карточка по центру: surface_1, радиус XL, 1px бордер, ОДИН
-    QGraphicsDropShadowEffect на вид (blur=20, 15% — лимит раздела 3);
-  - появление: карточка падает сверху с OutBack 200ms + фейд фона
-    (переход «Vertical Push» из раздела 4);
+    QGraphicsDropShadowEffect на вид (blur=20, 15%);
+  - появление: карточка падает сверху с OutBack 200ms + фейд фона;
   - навигация ↑↓, Enter — выполнить, Esc — закрыть (Esc всегда закрывает
-    оверлеи — инвариант раздела 9);
+    оверлеи);
   - клик мимо карточки тоже закрывает.
 
 Регистрация команд: ``palette.register(title, callback, icon=…, hint=…,
@@ -133,7 +132,7 @@ class CommandPalette(QWidget):
             }}
         """
         )
-        # Единственная тень на этот view (лимит раздела 3: blur=20, 15%)
+        # Единственная тень на этот view (blur=20, 15%)
         shadow = QGraphicsDropShadowEffect(card)
         shadow.setBlurRadius(20)
         shadow.setOffset(0, 8)
@@ -229,7 +228,7 @@ class CommandPalette(QWidget):
         self._commands = [c for c in self._commands if c.title != title]
 
     # ------------------------------------------------------------------
-    # Открытие/закрытие + анимации (Vertical Push, раздел 4)
+    # Открытие/закрытие + анимации (Vertical Push)
     # ------------------------------------------------------------------
     def is_open(self) -> bool:
         return self.isVisible()

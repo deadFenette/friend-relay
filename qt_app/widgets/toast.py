@@ -1,5 +1,4 @@
-"""Toast — ненавязчивый фидбек вместо модалок (ТЗ docs/DESIGN_STYLE.md, раздел 2
-«Respectful: no modal spam» и раздел 8 «Every action has a reaction»).
+"""Toast — ненавязчивый фидбек вместо модалок.
 
 Копирование, скачивание файла и подобные мелкие успешные действия
 показывают pill-тост внизу по центру родителя: появление slide-up + fade
@@ -24,7 +23,7 @@ from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
 
 from qt_app.theme import DUR_FAST, EASE_OUT_CUBIC, PALETTE
 
-_HOLD_MS = 1500  # ТЗ: «morphs into a checkmark for 1.5s»
+_HOLD_MS = 1500  # сколько тост висит на экране
 
 # Высота тоста фиксируется, радиус = height/2: QSS-радиус больше height/2
 # Qt рисует КВАДРАТНЫМИ углами (не клампит, в отличие от QPainter).

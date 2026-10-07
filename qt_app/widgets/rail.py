@@ -1,5 +1,5 @@
 """
-Rail — из ТЗ раздел 5 ("The Three Zones").
+Rail — вертикальная навигационная панель (левая зона макета).
 
 64px, всегда виден, только иконки. При наведении расширяется до 240px
 с подписями (200ms slide). Никакого дерева каналов — плоский список
@@ -135,7 +135,7 @@ class RailItem(QPushButton):
 class Rail(QWidget):
     """Emits item_selected(key) when a space is clicked.
 
-    Два режима (ТЗ раздел 5, responsive):
+    Два режима (responsive):
       - вертикальный (по умолчанию): 64px слева, при наведении 240px;
       - горизонтальный «bottom tab bar» для окон < 800px: фиксированная
         высота, только иконки, без раскрытия.
@@ -181,7 +181,7 @@ class Rail(QWidget):
         self._max_anim.setDuration(200)
         self._max_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-    # -- режимы (ТЗ раздел 5: <800px рейл становится нижней панелью) --
+    # -- режимы: <800px рейл становится нижней панелью --
 
     def set_orientation(self, horizontal: bool) -> None:
         """Перекладывает элементы между вертикальным и горизонтальным

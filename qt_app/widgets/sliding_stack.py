@@ -1,10 +1,10 @@
 """
-SlidingStackedWidget — ТЗ docs/DESIGN_STYLE.md, раздел 4 («Stacked Deck», «Transition Types»).
+SlidingStackedWidget — контейнер экранов с анимированными переходами.
 
 Один QMainWindow, все экраны — страницы этого стека. Реализованы переходы:
   - "slide"     — горизонтальный drill-down (Chat List -> Chat Room). 250ms,
                   InOutQuart; исходящий экран уезжает влево на 0.9 ширины
-                  И гаснет (scale+fade по ТЗ реализован как fade+сдвиг).
+                  И гаснет (fade + сдвиг).
   - "crossfade" — переход между равноправными разделами (табы настроек).
                   180ms, OutCubic.
   - "push"      — вертикальный push для модалок/оверлеев (User Profile).
@@ -127,7 +127,7 @@ class SlidingStackedWidget(QStackedWidget):
         group.finished.connect(lambda: self._finish_transition(old_widget, new_widget))
         group.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
 
-    # -- push (модалки/оверлеи, ТЗ раздел 4 п.3: OutBack, 300ms) --
+    # -- push (модалки/оверлеи: OutBack, 300ms) --
     def _push_to(self, new_widget: QWidget) -> None:
         old_widget = self.currentWidget()
         h = self.height()
@@ -149,7 +149,7 @@ class SlidingStackedWidget(QStackedWidget):
         fade_out.setEndValue(0.25)
         group.addAnimation(fade_out)
 
-        # OutBack даёт лёгкий overshoot — «playfulness» по ТЗ
+        # OutBack даёт лёгкий overshoot — анимация не выглядит мёртвой
         anim_in = QPropertyAnimation(new_widget, b"pos", self)
         anim_in.setDuration(self.PUSH_MS)
         anim_in.setEasingCurve(QEasingCurve.Type.OutBack)

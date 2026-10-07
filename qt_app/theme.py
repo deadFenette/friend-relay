@@ -271,7 +271,7 @@ FONT_SIZE_BODY_LG = 16
 FONT_SIZE_HEADING = 18
 FONT_SIZE_HEADING_LG = 20
 
-# Анимации (длительность в мс) — хронометраж из ТЗ раздела 4/5/8
+# Анимации (длительность в мс), единый хронометраж всех переходов
 DUR_FAST = 120
 DUR_MESSAGE = 150        # появление нового сообщения (slide up 8px + fade)
 DUR_CROSSFADE = 180      # равноправная навигация (OutCubic)
@@ -282,7 +282,7 @@ DUR_POP = 160            # появление reaction-пикера (fade + по
 DUR_NORMAL = DUR_CROSSFADE
 DUR_SLOW = DUR_SLIDE
 
-# Стаггер иконок в hover action bar бабла (ТЗ 6.3: каждая следующая +40мс)
+# Стаггер иконок в hover action bar бабла (каждая следующая +40мс)
 STAGGER_STEP_MS = 40
 
 
@@ -293,7 +293,7 @@ EASE_OUT_BACK = QEasingCurve.Type.OutBack
 
 
 def out_back_overshoot(amplitude: float = 1.70158) -> QEasingCurve:
-    """OutBack с настраиваемым «перелётом» (для playfulness, ТЗ раздел 4)."""
+    """OutBack с настраиваемым «перелётом» (для живых переходов)."""
     curve = QEasingCurve()
     curve.setType(QEasingCurve.Type.OutBack)
     curve.setOvershoot(amplitude)

@@ -217,7 +217,7 @@ class ChatScreen(QWidget):
     def _show_feed_placeholder(self, text: str, skeleton: bool = False) -> None:
         """Плейсхолдер в ленте (ошибка / «Нет сообщений») — чтобы экран
         не пустовал. Для состояний «Загрузка…» вместо текста показываем
-        shimmer-скелетон (ТЗ раздел 8: «Skeleton screens, not spinners»)."""
+        shimmer-скелетон."""
         if skeleton:
             self._feed_layout.insertWidget(self._feed_layout.count() - 1, SkeletonFeed())
             return
@@ -1036,8 +1036,7 @@ class ChatScreen(QWidget):
         self._position_scroll_down_btn()
         self._pulse_scroll_down_btn()
 
-    # ТЗ раздел 8, «New Message»: «If off-screen, the scroll thumb subtly
-    # pulses» — кнопка «вниз» с непрочитанными мягко пульсирует (opacity
+    # Кнопка «вниз» с непрочитанными мягко пульсирует (opacity
     # 1.0 -> 0.65 -> 1.0), пока её не нажмут. Анимация крутится только
     # пока есть непрочитанные.
     def _pulse_scroll_down_btn(self) -> None:
@@ -1604,7 +1603,7 @@ class ChatScreen(QWidget):
 
     def _on_copy_requested(self, text: str) -> None:
         """Копирует текст сообщения в буфер обмена + тост-фидбек
-        (ТЗ раздел 8: «Every action has a reaction» — morph в «✓»)."""
+        (галочка-подтверждение в самом тосте)."""
         clipboard = QApplication.clipboard()
         clipboard.setText(text)
         Toast.show_toast(self, "Скопировано в буфер")
@@ -1734,7 +1733,7 @@ class ChatScreen(QWidget):
 
     def _update_typing_indicator(self) -> None:
         """Обновляет индикатор набора текста; протухание (5с) и список
-        активных ведёт ядро. Сам индикатор — волна из точек (ТЗ 8)."""
+        активных ведёт ядро. Сам индикатор — волна из точек."""
         self._typing_indicator.set_typers(self._session.active_typers())
 
     def handle_typing_event(self, sender: str) -> None:

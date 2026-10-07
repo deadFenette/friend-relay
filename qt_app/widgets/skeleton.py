@@ -1,8 +1,7 @@
-"""Skeleton-экраны — ТЗ docs/DESIGN_STYLE.md, раздел 8.
+"""Skeleton-экраны — скелетоны вместо крутилок (см. docs/DESIGN_STYLE.md).
 
-«Skeleton screens, not spinners. Loading content shows shimmering gradient
-boxes (via QPropertyAnimation on QLinearGradient stop points), never a
-spinning wheel».
+Пока данные грузятся, на экране — скруглённые блоки, по которым плавно
+пробегает блик, а не вращающееся колесо.
 
 SkeletonBlock — скруглённый блок surface_2, по которому плавно пробегает
 блик (градиентная полоса white@low-alpha). Движение — QPropertyAnimation по
@@ -81,8 +80,8 @@ class SkeletonBlock(QWidget):
 class SkeletonFeed(QWidget):
     """«Скелет» ленты сообщений: 5 блоков, попеременно слева/справа.
 
-    Используется вместо текстового плейсхолдера «Загрузка…» (ТЗ: skeleton,
-    not spinners). Живёт на странице канала до прихода данных — очищается
+    Используется вместо текстового плейсхолдера «Загрузка…». Живёт на
+    странице канала до прихода данных — очищается
     обычным _clear_feed (это обычный виджет в layout ленты).
     """
 

@@ -814,6 +814,27 @@ class RelayServer:
         таймер вместо «сервер сломался")."""
         return self._flood.retry_after(sender or "?")
 
+    def health(self) -> dict:
+        """(v3.8.4) Лёгкая проба живости для GET /health — открытый маршрут
+        для мониторинга (systemd-таймер, curl в скрипте, аптайм-чекер).
+        Отличия от /ping: НЕ выдаёт session_token и не регистрирует сессию
+        (опрос раз в минуту не должен плодить сессии и писать телеметрию),
+        отличия от /server/stats: не трогает журнал, каналы, ботов и
+        телеметрию — только атомарные счётчики, ответ и за микросекунды
+        при занятом сервере. Вызывается БЕЗ access_key, поэтому наружу
+        идёт не больше, чем уже отдаёт /ping: имя хоста и версия протокола."""
+        uptime = 0
+        if self._started_at and self.is_running():
+            uptime = int(time.monotonic() - self._started_at)
+        return {
+            "ok": True,
+            "name": self.host_name,
+            "protocol": PROTOCOL_VERSION,
+            "running": self.is_running(),
+            "uptime_s": uptime,
+            "online": len(self.online_names()),
+        }
+
     def get_server_stats(self) -> dict:
         """(v2.0.2) Служебная сводка хоста для GET /server/stats — «жив ли
         сервер и что у него под капотом». Только счётчики, никаких имён и

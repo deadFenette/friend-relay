@@ -1,14 +1,13 @@
-"""TitleBar и фреймлесс-хелперы — ТЗ docs/DESIGN_STYLE.md, раздел 4 («Window Chrome»).
+"""TitleBar и фреймлесс-хелперы: собственная шапка окна.
 
-«Frameless but native-respecting. Custom titlebar on Windows/Linux;
-respects macOS traffic lights».
+Свой тайтлбар на Windows/Linux; на macOS остаются нативные «светофоры».
 
 Что здесь реализовано:
   - TitleBar: drag-зона, двойной клик = maximize, стеклянные кнопки
     минус/макс/клоуз (клоуз на hover — danger-цвет);
   - Windows: MainWindow возвращает HTCAPTION/HT*-коды из WM_NCHITTEST —
     нативный drag, ресайз со всех краёв, Aero Snap и Snap Layouts работают
-    как у обычного окна (требование раздела 4 про Snap Layouts);
+    как у обычного окна (включая Snap Layouts);
   - Linux/X11 и offscreen: ресайз через прозрачные краевые грипсы
     (startSystemResize), drag через startSystemMove — кроссплатформенные
     Qt-API, без ctypes;

@@ -1,10 +1,10 @@
-"""TypingIndicator — ТЗ docs/DESIGN_STYLE.md, раздел 8 («Typing indicator»).
+"""TypingIndicator — волна из точек «кто-то печатает».
 
-«Three dots that don't just blink — they smoothly morph through a wave
-(scale + opacity offset)».
+Три точки не мигают по-простому, а плавно перетекают волной
+(масштаб + прозрачность со сдвигом фазы).
 
 Реализация: QPainter-виджет, фаза волны крутится QPropertyAnimation по
-собственному Qt-свойству ``phase`` (без QTimer-хаков — требование раздела 3).
+собственному Qt-свойству ``phase`` (без QTimer-хаков).
 Три точки рисуются со сдвигом фазы: у каждой своя амплитуда масштаба и
 прозрачности, за счёт чего точки «перетекают» друг в друга волной.
 

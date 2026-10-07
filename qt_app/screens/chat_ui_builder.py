@@ -212,8 +212,7 @@ def build_chat_ui(screen) -> None:
     screen._online_label.setVisible(False)  # показываем только при ошибках
     strip_layout.addWidget(screen._online_label)
 
-    # Поиск в ленте — Ctrl+Shift+F (глобальный Ctrl+K занят палитрой
-    # команд, ТЗ раздел 9: «Ctrl+K opens a spotlight-style overlay»)
+    # Поиск в ленте — Ctrl+Shift+F (глобальный Ctrl+K занят палитрой команд)
     screen._search_btn = screen._glass_btn(
         "🔍", tooltip="Поиск по ленте (Ctrl+Shift+F)", width=32)
     screen._search_btn.clicked.connect(screen._toggle_search_bar)
@@ -320,7 +319,7 @@ def build_chat_ui(screen) -> None:
     screen._scroll_down_btn.setVisible(False)
     screen._scroll_down_btn.raise_()
 
-    # ---- Индикатор набора текста (волна из точек, ТЗ раздел 8) ----
+    # ---- Индикатор набора текста (волна из точек) ----
     screen._typing_indicator = TypingIndicator()
     screen._typing_indicator.setVisible(False)
     chat_layout.addWidget(screen._typing_indicator)

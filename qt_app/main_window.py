@@ -1,13 +1,13 @@
 """
-Главное окно — ОДИН QMainWindow, как требует ТЗ (раздел 4).
+Главное окно — ОДИН QMainWindow на всё приложение.
 
 Собирает:
-  - TitleBar (frameless-хром, раздел 4) — только на платформах, где сами
+  - TitleBar (frameless-хром) — только на платформах, где сами
     тянем drag/resize; на macOS/wayland остаются нативные декорации;
-  - Rail (раздел 5, Zone: Rail) — вертикальный слева, а при окне < 800px
-    перекладывается вниз как «bottom tab bar» (responsive, раздел 5);
+  - Rail — вертикальный слева, а при окне < 800px
+    перекладывается вниз как «bottom tab bar» (responsive);
   - SlidingStackedWidget (Canvas) — все экраны как страницы стека;
-  - CommandPalette (Ctrl+K, раздел 9) — spotlight-оверлей с командами:
+  - CommandPalette (Ctrl+K) — spotlight-оверлей с командами:
     переходы по разделам (Ctrl+1..6), каналы, действия.
 
 Palette (контекстная правая панель) подключается экранами по мере
@@ -47,7 +47,7 @@ RAIL_ITEMS = [
     ("settings", "theme", "Настройки"),
 ]
 
-# ТЗ раздел 5, responsive: <800px — рейл становится нижней панелью
+# Responsive-макет: уже 800px — рейл становится нижней панелью
 RAIL_BOTTOM_BREAKPOINT = 800
 
 
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
         self.resize(1100, 720)
         self.setMinimumSize(720, 480)
 
-        # -- Frameless-хром (ТЗ раздел 4): только где сами тянем drag/resize --
+        # -- Frameless-хром: только где сами тянем drag/resize --
         self._frameless = platform_supports_frameless()
         if self._frameless:
             self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
@@ -116,13 +116,13 @@ class MainWindow(QMainWindow):
         # Bots screen → открытие игры из карточки бота
         self._screens["bots"].open_game_requested.connect(self._on_open_game_from_bots)
 
-        # -- Command Palette (Ctrl+K, ТЗ раздел 9) --
+        # -- Command Palette (Ctrl+K) --
         self.palette = CommandPalette(self)
         self._register_static_commands()
         self._palette_shortcut = QShortcut("Ctrl+K", self)
         self._palette_shortcut.activated.connect(self._toggle_palette)
 
-        # -- Предсказуемые шорткаты (ТЗ раздел 9): Ctrl+1..9 для Rail --
+        # -- Шорткаты Ctrl+1..9 для пунктов Rail --
         for i, (key, _icon, _label) in enumerate(RAIL_ITEMS, start=1):
             QShortcut(f"Ctrl+{i}", self).activated.connect(
                 lambda checked=False, k=key: self._navigate(k)
@@ -140,7 +140,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, self._maybe_check_updates_on_startup)
 
     # ------------------------------------------------------------------
-    # Окно: frameless-поведение (ТЗ раздел 4)
+    # Окно: frameless-поведение
     # ------------------------------------------------------------------
     def _toggle_maximized(self) -> None:
         if self.isMaximized():
@@ -182,7 +182,7 @@ class MainWindow(QMainWindow):
         return super().nativeEvent(eventType, message)
 
     # ------------------------------------------------------------------
-    # Responsive (ТЗ раздел 5): <800px — рейл вниз, как tab bar
+    # Responsive: <800px — рейл вниз, как tab bar
     # ------------------------------------------------------------------
     def _update_responsive_rail(self) -> None:
         want_bottom = self.width() < RAIL_BOTTOM_BREAKPOINT
@@ -199,7 +199,7 @@ class MainWindow(QMainWindow):
         self.rail.setVisible(True)
 
     # ------------------------------------------------------------------
-    # Command Palette (ТЗ раздел 9)
+    # Command Palette
     # ------------------------------------------------------------------
     def _toggle_palette(self) -> None:
         # Каналы меняются на лету — перерегистрируем при каждом открытии
@@ -265,7 +265,7 @@ class MainWindow(QMainWindow):
         self.rail._on_clicked(key)
 
     def _on_nav(self, key: str) -> None:
-        # все пункты Rail равноправны -> кроссфейд (ТЗ раздел 4, п.1).
+        # все пункты Rail равноправны -> кроссфейд.
         # Drill-down (Chat List -> Chat Room) использует "slide",
         # модалки/оверлеи — "push".
         self.stack.go_to(self._screens[key], transition="crossfade")

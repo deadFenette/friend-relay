@@ -38,7 +38,7 @@ scripts/web_voice_browser_e2e.py (новый), tests/test_web_images_v368.py
      курсором), колесо мыши 1x–8x с якорем под курсором, кнопки ±;
    - пан: перетаскивание при увеличении (Pointer Events, touch-action);
    - закрытие: Esc, крестик, клик по фону. Скролл body блокируется.
-4. Темы (обязательно по ТЗ): весь хром — на токенах style.css
+4. Темы: весь хром — на токенах style.css
    (--surface/--text/--border/--shadow-pop...). Фон оверлея — отдельная
    переменная --lb-backdrop со СВОИМ значением на каждую тему:
    Aurora rgba(6,7,10,.86), Lukewarm Ocean rgba(4,14,19,.88), Snow

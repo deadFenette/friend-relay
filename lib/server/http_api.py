@@ -422,6 +422,27 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
     # p95_ms. Долгоживущие соединения (WS-туннель голоса) помечаются
     # _skip_meter=True: туннель живёт до отключения клиента, и его
     # «минутные латентности» ломали бы честные p95 обычных запросов.
+    def _reject_transfer_encoding(self) -> bool:
+        """(v3.8.4) Запросы с Transfer-Encoding отклоняем целиком.
+
+        Все наши клиенты (urllib, urllib3, браузеры) шлют тело с явным
+        Content-Length; chunked мы не декодируем. Опаснее всего не сам
+        отказ, а промолчать и НЕ закрыть соединение: непрочитанное
+        chunked-тело остаётся в rfile, и при keep-alive парсер примет
+        его остаток за СЛЕДУЮЩИЙ запрос (рассинхрон кадрирования, за
+        прокси - классический request smuggling). Поэтому 400 +
+        close_connection: сокет закрывается вместе с непрочитанным телом.
+        Возвращает True, если запрос был отклонён."""
+        if not self.headers.get("Transfer-Encoding"):
+            return False
+        self.close_connection = True
+        self._send_json(400, {
+            "ok": False,
+            "error": ("Transfer-Encoding не поддерживается - "
+                      "шлите тело с Content-Length"),
+        })
+        return True
+
     def do_GET(self):
         # Тот же безопасный wrapper, что и для do_POST - необработанное
         # исключение всегда долетает до клиента как понятный 500-ответ.
@@ -429,6 +450,8 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         self._last_status = 0
         t0 = time.perf_counter()  # monotonic — перевод часов не врёт
         try:
+            if self._reject_transfer_encoding():
+                return
             self._do_GET_impl()
         except (BrokenPipeError, ConnectionResetError):
             # (v3.8.1) клиент оборвал соединение при скачивании (файл/стрим):
@@ -464,6 +487,8 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
         self._last_status = 0
         t0 = time.perf_counter()
         try:
+            if self._reject_transfer_encoding():
+                return
             self._do_POST_impl()
         except (BrokenPipeError, ConnectionResetError):
             # (v3.8.1) см. do_GET - обрыв клиента не падение сервера
@@ -580,6 +605,15 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
                 and "websocket" in (self.headers.get("Upgrade") or "").lower()
                 and "upgrade" in (self.headers.get("Connection") or "").lower()):
             self._tunnel_voice_ws()
+            return
+
+        # /health (v3.8.4) - открытая проба живости для мониторинга
+        # (systemd/curl/внешние аптайм-чекеры). Без ключа, как /ping,
+        # но в отличие от него НУЛЕВЫЕ побочные эффекты: не выдаёт
+        # session_token, не регистрирует сессию и не пишет телеметрию
+        # session.kind - опрос раз в минуту не должен засорять хост.
+        if parsed.path == "/health":
+            self._get_health()
             return
 
         # /ping - единственный открытый маршрут (нужен для регистрации
@@ -733,6 +767,12 @@ class RelayHTTPHandler(BaseHTTPRequestHandler):
             "protocol": PROTOCOL_VERSION,
             "session_token": session_token,
         })
+
+    def _get_health(self):
+        # (v3.8.4) Тонкий фасад над relay.health(): счётчики, нужные
+        # мониторингу, без обращения к журналу/файлам/ботам - проба
+        # обязана отвечать быстро и не может упасть от побочных причин.
+        self._send_json(200, self.relay.health())
 
     def _get_events(self, parsed):
         sender = self._sender_from_header()
