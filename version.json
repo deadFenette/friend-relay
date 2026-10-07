@@ -1,16 +1,14 @@
 {
   "version": "3.8.3",
   "_comment_download_url": "Старый формат — один источник. Оставлен для совместимости, если download_urls не указан.",
-  "download_url": "https://github.com/yourname/friend-relay/releases/download/v1.2.0/FriendRelay-1.2.0.zip",
+  "download_url": "https://github.com/deadFenette/friend-relay/releases/download/v3.8.3/friend_relay_v3.8.3.zip",
   "_comment_download_urls": "Новый формат — список зеркал, пробуются по порядку. Можно мешать GitHub Releases, GitHub Pages, Яндекс.Диск (публичная прямая ссылка), свой сервер — что угодно по HTTP(S).",
   "download_urls": [
-    "https://github.com/yourname/friend-relay/releases/download/v1.2.0/FriendRelay-1.2.0.zip",
-    "https://yourname.github.io/friend-relay/FriendRelay-1.2.0.zip"
+    "https://github.com/deadFenette/friend-relay/releases/download/v3.8.3/friend_relay_v3.8.3.zip"
   ],
   "_comment_labels": "Необязательно — подписи к URL из download_urls (по индексу). Если не указано — подпись угадывается по домену.",
   "labels": [
-    "GitHub Releases",
-    "GitHub Pages"
+    "GitHub Releases"
   ],
   "_comment_relay_file_id": "Необязательно. Если у вас есть постоянно работающий хост в приватной сети (ZeroTier/Tailscale) и вы заливаете новый ZIP в файловую витрину (экран 'Файлы'), укажите тут file_id этого файла. Все подключённые к этому хосту в первую очередь качают обновление через него (быстро, без интернета).",
   "relay_file_id": "",
